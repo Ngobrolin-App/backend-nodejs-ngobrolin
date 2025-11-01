@@ -1,28 +1,87 @@
 const express = require('express');
-const router = express.Router();
-const pool = require('../config/database');
+const { body } = require('express-validator');
+const ConversationController = require('../controllers/conversationController');
 const { authenticateToken } = require('../middleware/auth');
 
-// Get user conversations
-router.get('/', authenticateToken, async (req, res) => {
-    try {
-        const conversations = await pool.query(`
-      SELECT DISTINCT c.id, c.type, c.name, c.created_at,
-             u.id as partner_id, u.username as partner_username, u.name as partner_name,
-             u.avatarUrl as partner_avatar
-      FROM tblconversations c
-      JOIN tblconversation_participants cp ON c.id = cp.conversation_id
-      LEFT JOIN tblconversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.user_id != $1
-      LEFT JOIN tbluser u ON cp2.user_id = u.id
-      WHERE cp.user_id = $1
-      ORDER BY c.created_at DESC
-    `, [req.user.id]);
+const router = express.Router();
 
-        res.json(conversations.rows);
-    } catch (error) {
-        console.error('Get conversations error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+// Validation rules
+const createConversationValidation = [
+    body('type')
+        .optional()
+        .isIn(['private', 'group'])
+        .withMessage('Type must be either private or group'),
+    body('participantId')
+        .if(body('type').equals('private'))
+        .notEmpty()
+        .withMessage('Participant ID is required for private conversations')
+        .isUUID()
+        .withMessage('Participant ID must be a valid UUID'),
+    body('name')
+        .if(body('type').equals('group'))
+        .notEmpty()
+        .withMessage('Name is required for group conversations')
+        .isLength({ min: 1, max: 100 })
+        .withMessage('Group name must be between 1 and 100 characters')
+        .trim(),
+    body('group_image')
+        .optional()
+        .isURL()
+        .withMessage('Group image must be a valid URL')
+];
+
+const updateConversationValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('name')
+        .optional()
+        .isLength({ min: 1, max: 100 })
+        .withMessage('Name must be between 1 and 100 characters')
+        .trim(),
+    body('group_image')
+        .optional()
+        .custom((value) => {
+            if (value === null || value === '') return true;
+            return /^https?:\/\/.+/.test(value);
+        })
+        .withMessage('Group image must be a valid URL or null')
+];
+
+const getConversationValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID')
+];
+
+const paginationValidation = [
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100')
+];
+
+const leaveConversationValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID')
+];
+
+// Routes - All POST methods
+router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
+router.post('/create', authenticateToken, createConversationValidation, ConversationController.createConversation);
+router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);
+router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);
+router.post('/leave', authenticateToken, leaveConversationValidation, ConversationController.leaveConversation);
 
 module.exports = router;

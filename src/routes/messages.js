@@ -1,37 +1,85 @@
 const express = require('express');
-const router = express.Router();
-const pool = require('../config/database');
+const { body } = require('express-validator');
+const MessageController = require('../controllers/messageController');
 const { authenticateToken } = require('../middleware/auth');
 
-// Get messages for a conversation
-router.get('/:conversationId', authenticateToken, async (req, res) => {
-    try {
-        const { conversationId } = req.params;
+const router = express.Router();
 
-        // Check if user is participant
-        const participant = await pool.query(
-            'SELECT id FROM tblconversation_participants WHERE conversation_id = $1 AND user_id = $2',
-            [conversationId, req.user.id]
-        );
+// Validation rules
+const getMessagesValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100')
+];
 
-        if (participant.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
-        }
+const sendMessageValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('content')
+        .notEmpty()
+        .withMessage('Message content is required')
+        .isLength({ min: 1, max: 5000 })
+        .withMessage('Message content must be between 1 and 5000 characters')
+        .trim(),
+    body('type')
+        .optional()
+        .isIn(['text', 'image', 'file', 'audio', 'video'])
+        .withMessage('Message type must be one of: text, image, file, audio, video')
+];
 
-        const messages = await pool.query(`
-      SELECT m.id, m.content, m.type, m.created_at,
-             u.id as sender_id, u.username as sender_username, u.name as sender_name
-      FROM tblmessages m
-      JOIN tbluser u ON m.sender_id = u.id
-      WHERE m.conversation_id = $1
-      ORDER BY m.created_at ASC
-    `, [conversationId]);
+const updateMessageValidation = [
+    body('messageId')
+        .notEmpty()
+        .withMessage('Message ID is required')
+        .isUUID()
+        .withMessage('Message ID must be a valid UUID'),
+    body('content')
+        .notEmpty()
+        .withMessage('Message content is required')
+        .isLength({ min: 1, max: 5000 })
+        .withMessage('Message content must be between 1 and 5000 characters')
+        .trim()
+];
 
-        res.json(messages.rows);
-    } catch (error) {
-        console.error('Get messages error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+const deleteMessageValidation = [
+    body('messageId')
+        .notEmpty()
+        .withMessage('Message ID is required')
+        .isUUID()
+        .withMessage('Message ID must be a valid UUID')
+];
+
+const markAsReadValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('messageId')
+        .notEmpty()
+        .withMessage('Message ID is required')
+        .isUUID()
+        .withMessage('Message ID must be a valid UUID')
+];
+
+// Routes - All POST methods
+router.post('/get', authenticateToken, getMessagesValidation, MessageController.getMessages);
+router.post('/send', authenticateToken, sendMessageValidation, MessageController.sendMessage);
+router.post('/update', authenticateToken, updateMessageValidation, MessageController.updateMessage);
+router.post('/delete', authenticateToken, deleteMessageValidation, MessageController.deleteMessage);
+router.post('/mark-read', authenticateToken, markAsReadValidation, MessageController.markAsRead);
 
 module.exports = router;

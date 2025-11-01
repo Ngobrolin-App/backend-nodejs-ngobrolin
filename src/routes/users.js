@@ -1,47 +1,64 @@
 const express = require('express');
-const router = express.Router();
-const pool = require('../config/database');
+const { body } = require('express-validator');
+const UserController = require('../controllers/userController');
+const AuthController = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 
-// Get all users (for search)
-router.get('/', authenticateToken, async (req, res) => {
-    try {
-        const { search } = req.query;
-        let query = 'SELECT id, username, name, bio, avatarUrl FROM tbluser WHERE id != $1';
-        let params = [req.user.id];
+const router = express.Router();
 
-        if (search) {
-            query += ' AND (username ILIKE $2 OR name ILIKE $2)';
-            params.push(`%${search}%`);
-        }
+// Validation rules
+const updateProfileValidation = [
+    body('name')
+        .optional()
+        .isLength({ min: 1, max: 100 })
+        .withMessage('Name must be between 1 and 100 characters')
+        .trim(),
+    body('bio')
+        .optional()
+        .isLength({ max: 500 })
+        .withMessage('Bio must be less than 500 characters')
+        .trim(),
+    body('avatarUrl')
+        .optional()
+        .isURL()
+        .withMessage('Avatar URL must be a valid URL'),
+    body('isPrivate')
+        .optional()
+        .isBoolean()
+        .withMessage('isPrivate must be a boolean')
+];
 
-        query += ' ORDER BY name LIMIT 50';
+const searchValidation = [
+    body('q')
+        .notEmpty()
+        .withMessage('Search query is required')
+        .isLength({ min: 1, max: 50 })
+        .withMessage('Search query must be between 1 and 50 characters')
+];
 
-        const users = await pool.query(query, params);
-        res.json(users.rows);
-    } catch (error) {
-        console.error('Get users error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+const getUserValidation = [
+    body('userId')
+        .notEmpty()
+        .withMessage('User ID is required')
+        .isUUID()
+        .withMessage('User ID must be a valid UUID')
+];
 
-// Get user profile
-router.get('/profile', authenticateToken, async (req, res) => {
-    try {
-        const user = await pool.query(
-            'SELECT id, username, name, bio, avatarUrl, language, isPrivate FROM tbluser WHERE id = $1',
-            [req.user.id]
-        );
+const blockUserValidation = [
+    body('userId')
+        .notEmpty()
+        .withMessage('User ID is required')
+        .isUUID()
+        .withMessage('User ID must be a valid UUID')
+];
 
-        if (user.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        res.json(user.rows[0]);
-    } catch (error) {
-        console.error('Get profile error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+// Routes - All POST methods
+router.post('/profile/get', authenticateToken, AuthController.getProfile);
+router.post('/profile/update', authenticateToken, updateProfileValidation, AuthController.updateProfile);
+router.post('/search', authenticateToken, searchValidation, UserController.searchUsers);
+router.post('/get-user', authenticateToken, getUserValidation, UserController.getUserById);
+router.post('/block', authenticateToken, blockUserValidation, UserController.blockUser);
+router.post('/unblock', authenticateToken, blockUserValidation, UserController.unblockUser);
+router.post('/blocked/list', authenticateToken, UserController.getBlockedUsers);
 
 module.exports = router;
