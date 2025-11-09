@@ -2,6 +2,13 @@ const { Message, Conversation, ConversationParticipant, User } = require('../mod
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
+function buildAvatarUrl(path, req) {
+    if (!path) return null;
+    const base = `${req.protocol}://${req.get('host')}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${normalizedPath}`;
+}
+
 class MessageController {
     // Get messages for a conversation
     static async getMessages(req, res) {
@@ -38,7 +45,13 @@ class MessageController {
             });
 
             res.json({
-                messages: messages.rows.reverse(), // Reverse to show oldest first
+                messages: messages.rows.reverse().map(m => ({
+                    ...m.toJSON(),
+                    sender: {
+                        ...m.sender.toJSON(),
+                        avatarUrl: buildAvatarUrl(m.sender.avatarUrl, req),
+                    }
+                })),
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),

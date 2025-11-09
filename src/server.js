@@ -5,6 +5,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 
 // Database and models
 const { sequelize } = require('./config/database');
@@ -40,6 +42,13 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve uploads statically
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+const avatarsDir = path.join(uploadsDir, 'avatars');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(avatarsDir)) fs.mkdirSync(avatarsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
 // Make io available in routes
 app.use((req, res, next) => {
     req.io = io;
@@ -54,8 +63,8 @@ app.use('/api/messages', messageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
+    res.json({
+        status: 'OK',
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development'
     });
@@ -69,7 +78,7 @@ app.use((req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
-    res.status(500).json({ 
+    res.status(500).json({
         error: 'Internal server error',
         ...(process.env.NODE_ENV === 'development' && { details: err.message })
     });
@@ -101,6 +110,7 @@ async function startServer() {
 
         // Start server
         server.listen(PORT, () => {
+            // server.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);

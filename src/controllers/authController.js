@@ -2,6 +2,13 @@ const { User } = require('../models');
 const { hashPassword, comparePassword, generateToken } = require('../utils/auth');
 const { validationResult } = require('express-validator');
 
+function buildAvatarUrl(path, req) {
+    if (!path) return null;
+    const base = `${req.protocol}://${req.get('host')}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${normalizedPath}`;
+}
+
 class AuthController {
     // Register new user
     static async register(req, res) {
@@ -43,7 +50,7 @@ class AuthController {
 
             res.status(201).json({
                 message: 'User registered successfully',
-                user: newUser.toJSON(),
+                user: { ...newUser.toJSON(), avatarUrl: buildAvatarUrl(newUser.avatarUrl, req) },
                 token
             });
         } catch (error) {
@@ -92,7 +99,7 @@ class AuthController {
 
             res.json({
                 message: 'Login successful',
-                user: user.toJSON(),
+                user: { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, req) },
                 token
             });
         } catch (error) {
@@ -115,7 +122,7 @@ class AuthController {
             }
 
             res.json({
-                user: user.toJSON()
+                user: { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, req) }
             });
         } catch (error) {
             console.error('Get profile error:', error);
@@ -136,27 +143,45 @@ class AuthController {
                 });
             }
 
-            const { name, bio, language, isPrivate } = req.body;
-            
+            const { name, bio, language, isPrivate, currentPassword, newPassword, avatarUrl } = req.body;
             const user = await User.findByPk(req.user.userId);
-            
+
             if (!user) {
-                return res.status(404).json({
-                    error: 'User not found'
-                });
+                return res.status(404).json({ error: 'User not found' });
             }
 
-            // Update user
-            await user.update({
-                name: name || user.name,
-                bio: bio !== undefined ? bio : user.bio,
-                language: language || user.language,
-                isPrivate: isPrivate !== undefined ? isPrivate : user.isPrivate
-            });
+            // Handle password change if provided
+            if (currentPassword && newPassword) {
+                const isValidPassword = await comparePassword(currentPassword, user.password);
+                if (!isValidPassword) {
+                    return res.status(401).json({ error: 'Current password is incorrect' });
+                }
+                const hashedPassword = await hashPassword(newPassword);
+                user.password = hashedPassword;
+            }
+
+            // Handle avatar file upload atau path yang dikirim
+            let finalAvatarUrl = user.avatarUrl;
+            if (req.file) {
+                // Simpan path relatif saja
+                finalAvatarUrl = `/uploads/avatars/${req.file.filename}`;
+            } else if (avatarUrl) {
+                // Terima path relatif dari body
+                finalAvatarUrl = avatarUrl;
+            }
+
+            // Update other fields
+            user.name = name || user.name;
+            user.bio = bio !== undefined ? bio : user.bio;
+            user.language = language || user.language;
+            user.isPrivate = isPrivate !== undefined ? isPrivate : user.isPrivate;
+            user.avatarUrl = finalAvatarUrl;
+
+            await user.save();
 
             res.json({
                 message: 'Profile updated successfully',
-                user: user.toJSON()
+                user: { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, req) }
             });
         } catch (error) {
             console.error('Update profile error:', error);

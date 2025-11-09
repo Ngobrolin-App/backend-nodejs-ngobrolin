@@ -38,9 +38,7 @@ const User = sequelize.define('User', {
     avatarUrl: {
         type: DataTypes.TEXT,
         allowNull: true,
-        validate: {
-            isUrl: true
-        }
+        // Hapus validasi URL agar path relatif diperbolehkan
     },
     language: {
         type: DataTypes.STRING(5),

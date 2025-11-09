@@ -2,6 +2,13 @@ const { Conversation, ConversationParticipant, User, Message, BlockedUser } = re
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
+function buildAvatarUrl(path, req) {
+    if (!path) return null;
+    const base = `${req.protocol}://${req.get('host')}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${normalizedPath}`;
+}
+
 class ConversationController {
     // Get all conversations for current user
     static async getConversations(req, res) {
@@ -58,7 +65,10 @@ class ConversationController {
                     type: conversation.type,
                     name: conversation.name,
                     group_image: conversation.group_image,
-                    participants: otherParticipants.map(p => p.user),
+                    participants: otherParticipants.map(p => ({
+                        ...p.user.toJSON(),
+                        avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
+                    })),
                     lastMessage: conversation.messages[0] || null,
                     joined_at: participant.joined_at,
                     last_read_message_id: participant.last_read_message_id
@@ -252,7 +262,10 @@ class ConversationController {
                     type: conversation.type,
                     name: conversation.name,
                     group_image: conversation.group_image,
-                    participants: conversation.participants.map(p => p.user),
+                    participants: conversation.participants.map(p => ({
+                        ...p.user.toJSON(),
+                        avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
+                    })),
                     created_at: conversation.created_at
                 }
             });

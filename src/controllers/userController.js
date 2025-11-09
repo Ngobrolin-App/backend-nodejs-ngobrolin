@@ -2,6 +2,13 @@ const { User, BlockedUser } = require('../models');
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
+function buildAvatarUrl(path, req) {
+    if (!path) return null;
+    const base = `${req.protocol}://${req.get('host')}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${normalizedPath}`;
+}
+
 class UserController {
     // Search users
     static async searchUsers(req, res) {
@@ -54,7 +61,7 @@ class UserController {
             });
 
             res.json({
-                users: users.rows,
+                users: users.rows.map(u => ({ ...u.toJSON(), avatarUrl: buildAvatarUrl(u.avatarUrl, req) })),
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
@@ -101,7 +108,7 @@ class UserController {
                 });
             }
 
-            res.json({ user });
+            res.json({ user: { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, req) } });
         } catch (error) {
             console.error('Get user error:', error);
             res.status(500).json({
@@ -218,7 +225,13 @@ class UserController {
             });
 
             res.json({
-                blockedUsers: blockedUsers.rows,
+                blockedUsers: blockedUsers.rows.map(b => ({
+                    ...b.toJSON(),
+                    blockedUser: {
+                        ...b.blockedUser.toJSON(),
+                        avatarUrl: buildAvatarUrl(b.blockedUser.avatarUrl, req),
+                    }
+                })),
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
