@@ -121,6 +121,13 @@ class ConversationController {
                     });
                 }
 
+                // NEW: Block creating conversation if target account is private and it's not yourself
+                if (participant.isPrivate && participant.id !== req.user.userId) {
+                    return res.status(403).json({
+                        error: 'Cannot create conversation with private account'
+                    });
+                }
+
                 // Check if users are blocked
                 const isBlocked = await BlockedUser.findOne({
                     where: {

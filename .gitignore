@@ -64,6 +64,7 @@ Thumbs.db
 # Build directories
 dist/
 build/
+uploads/
 
 # Database
 *.sqlite

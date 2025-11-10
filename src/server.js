@@ -109,8 +109,8 @@ async function startServer() {
         }
 
         // Start server
-        server.listen(PORT, () => {
-            // server.listen(PORT, '0.0.0.0', () => {
+        // server.listen(PORT, () => {
+        server.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
