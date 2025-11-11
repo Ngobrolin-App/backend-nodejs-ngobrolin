@@ -8,7 +8,6 @@ const socketHandlers = (socket, io) => {
             const { token } = data;
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // Check if user exists
             const user = await User.findByPk(decoded.userId);
             if (!user) {
                 socket.emit('auth_error', { message: 'User not found' });
@@ -18,15 +17,13 @@ const socketHandlers = (socket, io) => {
             socket.userId = decoded.userId;
             socket.username = decoded.username;
 
-            // Join user to their personal room
             socket.join(`user_${socket.userId}`);
-
             socket.emit('authenticated', {
                 message: 'Authentication successful',
                 userId: socket.userId
             });
 
-            console.log(`User ${socket.username} authenticated via socket`);
+            console.log(`User ${socket.username || socket.userId} authenticated via socket`);
         } catch (error) {
             console.error('Socket authentication error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
@@ -172,9 +169,10 @@ const socketHandlers = (socket, io) => {
     });
 };
 
-module.exports = (io) => {
-    io.on('connection', (socket) => {
-        console.log('User connected:', socket.id);
-        socketHandlers(socket, io);
-    });
-};
+module.exports = socketHandlers;
+// module.exports = (io) => {
+//     io.on('connection', (socket) => {
+//         console.log('User connected:', socket.id);
+//         socketHandlers(socket, io);
+//     });
+// };
