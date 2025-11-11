@@ -113,6 +113,12 @@ class MessageController {
                 ]
             });
 
+            // Ensure sender doesn't get unread count for their own message
+            await ConversationParticipant.update(
+                { last_read_message_id: message.id },
+                { where: { conversation_id: conversationId, user_id: req.user.userId } }
+            );
+
             // Emit to socket (will be handled by socket handlers)
             if (req.io) {
                 req.io.to(`conversation_${conversationId}`).emit('new_message', {
