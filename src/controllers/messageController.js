@@ -118,6 +118,25 @@ class MessageController {
                 req.io.to(`conversation_${conversationId}`).emit('new_message', {
                     message: messageWithSender
                 });
+
+                // Also emit conversation update to participants' personal rooms so chat list stays in sync
+                const participants = await ConversationParticipant.findAll({
+                    where: { conversation_id: conversationId }
+                });
+
+                const payload = {
+                    conversationId,
+                    lastMessage: {
+                        id: messageWithSender.id,
+                        content: messageWithSender.content,
+                        created_at: messageWithSender.created_at,
+                        sender_id: messageWithSender.sender_id, // tambahkan sender_id untuk filter di frontend
+                    }
+                };
+
+                participants.forEach(p => {
+                    req.io.to(`user_${p.user_id}`).emit('conversation_updated', payload);
+                });
             }
 
             res.status(201).json({
