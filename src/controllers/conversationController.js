@@ -204,6 +204,38 @@ class ConversationController {
                 )
             );
 
+            // Emit realtime: conversation_created ke setiap peserta di room personal mereka
+            if (req.io) {
+                const participantRows = await ConversationParticipant.findAll({
+                    where: { conversation_id: conversation.id },
+                    include: [
+                        {
+                            model: User,
+                            as: 'user',
+                            attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
+                        }
+                    ]
+                });
+
+                const payload = {
+                    conversation: {
+                        id: conversation.id,
+                        type: conversation.type,
+                        name: conversation.name,
+                        group_image: conversation.group_image,
+                        participants: participantRows.map(p => ({
+                            ...p.user.toJSON(),
+                            avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
+                        })),
+                        created_at: conversation.created_at
+                    }
+                };
+
+                participants.forEach(userId => {
+                    req.io.to(`user_${userId}`).emit('conversation_created', payload);
+                });
+            }
+
             res.status(201).json({
                 message: 'Conversation created successfully',
                 conversation: {
