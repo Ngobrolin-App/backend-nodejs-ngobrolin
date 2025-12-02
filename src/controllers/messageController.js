@@ -283,6 +283,59 @@ class MessageController {
                 last_read_message_id: messageId
             });
 
+            // After updating this user's read state, check if all participants have read up to some point
+            const participants = await ConversationParticipant.findAll({
+                where: { conversation_id: conversationId }
+            });
+
+            // If every participant has a non-null last_read_message_id, mark messages that everyone has read as is_read=true
+            const lastReadTimes = [];
+            for (const p of participants) {
+                if (!p.last_read_message_id) {
+                    lastReadTimes.length = 0;
+                    break;
+                }
+                const lastReadMsg = await Message.findByPk(p.last_read_message_id, { attributes: ['created_at'] });
+                if (!lastReadMsg || !lastReadMsg.created_at) {
+                    lastReadTimes.length = 0;
+                    break;
+                }
+                lastReadTimes.push(lastReadMsg.created_at);
+            }
+
+            if (lastReadTimes.length === participants.length && participants.length > 0) {
+                const thresholdDate = new Date(Math.min(...lastReadTimes.map(d => new Date(d).getTime())));
+
+                const toUpdate = await Message.findAll({
+                    attributes: ['id'],
+                    where: {
+                        conversation_id: conversationId,
+                        is_read: false,
+                        created_at: { [Op.lte]: thresholdDate }
+                    }
+                });
+
+                if (toUpdate.length > 0) {
+                    await Message.update(
+                        { is_read: true },
+                        {
+                            where: {
+                                conversation_id: conversationId,
+                                is_read: false,
+                                created_at: { [Op.lte]: thresholdDate }
+                            }
+                        }
+                    );
+
+                    if (req.io) {
+                        req.io.to(`conversation_${conversationId}`).emit('messages_read_status_updated', {
+                            conversationId,
+                            messageIds: toUpdate.map(m => m.id)
+                        });
+                    }
+                }
+            }
+
             // Emit to socket
             if (req.io) {
                 req.io.to(`conversation_${conversationId}`).emit('messages_read', {
