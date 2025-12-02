@@ -55,11 +55,27 @@ class ConversationController {
                 order: [['joined_at', 'DESC']]
             });
 
-            // Format response
-            const formattedConversations = conversations.rows.map(participant => {
+            // Format response with accurate unread count
+            const formattedConversations = await Promise.all(conversations.rows.map(async participant => {
                 const conversation = participant.conversation;
                 const otherParticipants = conversation.participants.filter(p => p.user_id !== req.user.userId);
-                
+
+                let baselineTime = participant.joined_at;
+                if (participant.last_read_message_id) {
+                    const lastReadMsg = await Message.findByPk(participant.last_read_message_id, { attributes: ['created_at'] });
+                    if (lastReadMsg && lastReadMsg.created_at) {
+                        baselineTime = lastReadMsg.created_at;
+                    }
+                }
+
+                const unreadCount = await Message.count({
+                    where: {
+                        conversation_id: conversation.id,
+                        created_at: { [Op.gt]: baselineTime },
+                        sender_id: { [Op.ne]: req.user.userId }
+                    }
+                });
+
                 return {
                     id: conversation.id,
                     type: conversation.type,
@@ -71,8 +87,16 @@ class ConversationController {
                     })),
                     lastMessage: conversation.messages[0] || null,
                     joined_at: participant.joined_at,
-                    last_read_message_id: participant.last_read_message_id
+                    last_read_message_id: participant.last_read_message_id,
+                    unreadCount
                 };
+            }));
+
+            // Sort conversations by last message time (fallback: joined_at)
+            formattedConversations.sort((a, b) => {
+                const ta = a.lastMessage?.created_at || a.joined_at;
+                const tb = b.lastMessage?.created_at || b.joined_at;
+                return new Date(tb) - new Date(ta);
             });
 
             res.json({
