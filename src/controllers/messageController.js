@@ -45,13 +45,17 @@ class MessageController {
             });
 
             res.json({
-                messages: messages.rows.reverse().map(m => ({
-                    ...m.toJSON(),
-                    sender: {
-                        ...m.sender.toJSON(),
-                        avatarUrl: buildAvatarUrl(m.sender.avatarUrl, req),
-                    }
-                })),
+                messages: messages.rows.reverse().map(m => {
+                    const json = m.toJSON();
+                    return {
+                        ...json,
+                        content: json.type !== 'text' ? buildAvatarUrl(json.content, req) : json.content,
+                        sender: {
+                            ...m.sender.toJSON(),
+                            avatarUrl: buildAvatarUrl(m.sender.avatarUrl, req),
+                        }
+                    };
+                }),
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
@@ -112,6 +116,14 @@ class MessageController {
                     }
                 ]
             });
+            const msgOut = {
+                ...messageWithSender.toJSON(),
+                content: messageWithSender.type !== 'text' ? buildAvatarUrl(messageWithSender.content, req) : messageWithSender.content,
+                sender: {
+                    ...messageWithSender.sender.toJSON(),
+                    avatarUrl: buildAvatarUrl(messageWithSender.sender.avatarUrl, req),
+                }
+            };
 
             // Ensure sender doesn't get unread count for their own message
             await ConversationParticipant.update(
@@ -122,7 +134,7 @@ class MessageController {
             // Emit to socket (will be handled by socket handlers)
             if (req.io) {
                 req.io.to(`conversation_${conversationId}`).emit('new_message', {
-                    message: messageWithSender
+                    message: msgOut
                 });
 
                 // Also emit conversation update to participants' personal rooms so chat list stays in sync
@@ -131,13 +143,14 @@ class MessageController {
                 });
 
                 const payload = {
-                    conversationId,
-                    lastMessage: {
-                        id: messageWithSender.id,
-                        content: messageWithSender.content,
-                        created_at: messageWithSender.created_at,
-                        sender_id: messageWithSender.sender_id, // tambahkan sender_id untuk filter di frontend
-                    }
+                  conversationId,
+                  lastMessage: {
+                    id: messageWithSender.id,
+                    content: messageWithSender.type !== 'text' ? buildAvatarUrl(messageWithSender.content, req) : messageWithSender.content,
+                    created_at: messageWithSender.created_at,
+                    sender_id: messageWithSender.sender_id,
+                    type: messageWithSender.type,
+                  }
                 };
 
                 participants.forEach(p => {
@@ -147,13 +160,27 @@ class MessageController {
 
             res.status(201).json({
                 message: 'Message sent successfully',
-                data: messageWithSender
+                data: msgOut
             });
         } catch (error) {
             console.error('Send message error:', error);
             res.status(500).json({
                 error: 'Internal server error'
             });
+        }
+    }
+
+    static async uploadAttachment(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file uploaded' });
+            }
+            const type = req.body.type || req.query.type || 'file';
+            const url = `/uploads/messages/${req.file.filename}`;
+            res.json({ url, type });
+        } catch (error) {
+            console.error('Upload attachment error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 

@@ -2,8 +2,24 @@ const express = require('express');
 const { body } = require('express-validator');
 const MessageController = require('../controllers/messageController');
 const { authenticateToken } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', '..', 'uploads', 'messages');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${req.user?.userId || 'unknown'}_${Date.now()}${ext}`);
+    }
+});
+const upload = multer({ storage });
 
 // Validation rules
 const getMessagesValidation = [
@@ -76,6 +92,7 @@ const markAsReadValidation = [
 ];
 
 // Routes - All POST methods
+router.post('/upload', authenticateToken, upload.single('file'), MessageController.uploadAttachment);
 router.post('/get', authenticateToken, getMessagesValidation, MessageController.getMessages);
 router.post('/send', authenticateToken, sendMessageValidation, MessageController.sendMessage);
 router.post('/update', authenticateToken, updateMessageValidation, MessageController.updateMessage);
