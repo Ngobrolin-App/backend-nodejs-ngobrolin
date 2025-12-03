@@ -1,117 +1,33 @@
-const { Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
-const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
-
-function buildAvatarUrl(path, req) {
-    if (!path) return null;
-    const base = `${req.protocol}://${req.get('host')}`;
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    return `${base}${normalizedPath}`;
-}
+const ConversationService = require('../services/conversationService');
 
 class ConversationController {
     // Get all conversations for current user
     static async getConversations(req, res) {
         try {
             const { page = 1, limit = 20 } = req.query;
-            const offset = (page - 1) * limit;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-            const conversations = await ConversationParticipant.findAndCountAll({
-                where: { user_id: req.user.userId },
-                include: [
-                    {
-                        model: Conversation,
-                        as: 'conversation',
-                        include: [
-                            {
-                                model: ConversationParticipant,
-                                as: 'participants',
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'user',
-                                        attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
-                                    }
-                                ]
-                            },
-                            {
-                                model: Message,
-                                as: 'messages',
-                                limit: 1,
-                                order: [['created_at', 'DESC']],
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'sender',
-                                        attributes: ['id', 'username', 'name']
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ],
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                order: [['joined_at', 'DESC']]
-            });
-
-            // Format response with accurate unread count
-            const formattedConversations = await Promise.all(conversations.rows.map(async participant => {
-                const conversation = participant.conversation;
-                const otherParticipants = conversation.participants.filter(p => p.user_id !== req.user.userId);
-
-                let baselineTime = participant.joined_at;
-                if (participant.last_read_message_id) {
-                    const lastReadMsg = await Message.findByPk(participant.last_read_message_id, { attributes: ['created_at'] });
-                    if (lastReadMsg && lastReadMsg.created_at) {
-                        baselineTime = lastReadMsg.created_at;
-                    }
-                }
-
-                const unreadCount = await Message.count({
-                    where: {
-                        conversation_id: conversation.id,
-                        created_at: { [Op.gt]: baselineTime },
-                        sender_id: { [Op.ne]: req.user.userId }
-                    }
-                });
-
-                return {
-                    id: conversation.id,
-                    type: conversation.type,
-                    name: conversation.name,
-                    group_image: conversation.group_image,
-                    participants: otherParticipants.map(p => ({
-                        ...p.user.toJSON(),
-                        avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
-                    })),
-                    lastMessage: conversation.messages[0] || null,
-                    joined_at: participant.joined_at,
-                    last_read_message_id: participant.last_read_message_id,
-                    unreadCount
-                };
-            }));
-
-            // Sort conversations by last message time (fallback: joined_at)
-            formattedConversations.sort((a, b) => {
-                const ta = a.lastMessage?.created_at || a.joined_at;
-                const tb = b.lastMessage?.created_at || b.joined_at;
-                return new Date(tb) - new Date(ta);
-            });
+            const result = await ConversationService.getConversations(
+                req.user.userId,
+                baseUrl,
+                page,
+                limit
+            );
 
             res.json({
-                conversations: formattedConversations,
+                conversations: result.conversations,
                 pagination: {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    total: conversations.count,
-                    totalPages: Math.ceil(conversations.count / limit)
+                    page: result.page,
+                    limit: result.limit,
+                    total: result.total,
+                    totalPages: result.totalPages
                 }
             });
         } catch (error) {
             console.error('Get conversations error:', error);
-            res.status(500).json({
-                error: 'Internal server error'
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
             });
         }
     }
@@ -127,153 +43,39 @@ class ConversationController {
                 });
             }
 
-            const { participantId, type = 'private', name, group_image } = req.body;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-            // For private conversations
-            if (type === 'private') {
-                if (!participantId) {
-                    return res.status(400).json({
-                        error: 'Participant ID is required for private conversations'
-                    });
-                }
-
-                // Check if participant exists
-                const participant = await User.findByPk(participantId);
-                if (!participant) {
-                    return res.status(404).json({
-                        error: 'Participant not found'
-                    });
-                }
-
-                // NEW: Block creating conversation if target account is private and it's not yourself
-                if (participant.isPrivate && participant.id !== req.user.userId) {
-                    return res.status(403).json({
-                        error: 'Cannot create conversation with private account'
-                    });
-                }
-
-                // Check if users are blocked
-                const isBlocked = await BlockedUser.findOne({
-                    where: {
-                        [Op.or]: [
-                            { user_id: req.user.userId, blocked_user_id: participantId },
-                            { user_id: participantId, blocked_user_id: req.user.userId }
-                        ]
-                    }
-                });
-
-                if (isBlocked) {
-                    return res.status(403).json({
-                        error: 'Cannot create conversation with blocked user'
-                    });
-                }
-
-                // Check if private conversation already exists
-                const existingConversation = await ConversationParticipant.findAll({
-                    where: {
-                        user_id: { [Op.in]: [req.user.userId, participantId] }
-                    },
-                    include: [
-                        {
-                            model: Conversation,
-                            as: 'conversation',
-                            where: { type: 'private' }
-                        }
-                    ]
-                });
-
-                // Group by conversation_id and check if both users are in the same conversation
-                const conversationGroups = {};
-                existingConversation.forEach(cp => {
-                    if (!conversationGroups[cp.conversation_id]) {
-                        conversationGroups[cp.conversation_id] = [];
-                    }
-                    conversationGroups[cp.conversation_id].push(cp.user_id);
-                });
-
-                for (const convId in conversationGroups) {
-                    if (conversationGroups[convId].length === 2) {
-                        const conversation = existingConversation.find(cp => cp.conversation_id === convId).conversation;
-                        return res.json({
-                            message: 'Conversation already exists',
-                            conversation: {
-                                id: conversation.id,
-                                type: conversation.type,
-                                created_at: conversation.created_at
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Create conversation
-            const conversation = await Conversation.create({
-                type,
-                name: type === 'group' ? name : null,
-                group_image: type === 'group' ? group_image : null
-            });
-
-            // Add participants
-            const participants = [req.user.userId];
-            if (type === 'private' && participantId) {
-                participants.push(participantId);
-            }
-
-            await Promise.all(
-                participants.map(userId =>
-                    ConversationParticipant.create({
-                        conversation_id: conversation.id,
-                        user_id: userId
-                    })
-                )
+            const result = await ConversationService.createConversation(
+                req.user.userId,
+                req.body,
+                baseUrl
             );
 
-            // Emit realtime: conversation_created ke setiap peserta di room personal mereka
-            if (req.io) {
-                const participantRows = await ConversationParticipant.findAll({
-                    where: { conversation_id: conversation.id },
-                    include: [
-                        {
-                            model: User,
-                            as: 'user',
-                            attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
-                        }
-                    ]
-                });
-
-                const payload = {
-                    conversation: {
-                        id: conversation.id,
-                        type: conversation.type,
-                        name: conversation.name,
-                        group_image: conversation.group_image,
-                        participants: participantRows.map(p => ({
-                            ...p.user.toJSON(),
-                            avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
-                        })),
-                        created_at: conversation.created_at
-                    }
-                };
-
-                participants.forEach(userId => {
-                    req.io.to(`user_${userId}`).emit('conversation_created', payload);
+            // Emit realtime events if not existing
+            if (!result.isExisting && req.io && result.participants && result.payload) {
+                result.participants.forEach(userId => {
+                    req.io.to(`user_${userId}`).emit('conversation_created', result.payload);
                 });
             }
 
-            res.status(201).json({
-                message: 'Conversation created successfully',
-                conversation: {
-                    id: conversation.id,
-                    type: conversation.type,
-                    name: conversation.name,
-                    group_image: conversation.group_image,
-                    created_at: conversation.created_at
-                }
-            });
+            // If existing, we return 200 (default res.json is 200). If new, we might want 201.
+            // The original code returned 200 for existing and 201 for new.
+            if (result.isExisting) {
+                return res.json({
+                    message: result.message,
+                    conversation: result.conversation
+                });
+            } else {
+                return res.status(201).json({
+                    message: result.message,
+                    conversation: result.conversation
+                });
+            }
+
         } catch (error) {
             console.error('Create conversation error:', error);
-            res.status(500).json({
-                error: 'Internal server error'
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
             });
         }
     }
@@ -282,60 +84,19 @@ class ConversationController {
     static async getConversationById(req, res) {
         try {
             const { conversationId } = req.params;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-            // Check if user is participant
-            const participation = await ConversationParticipant.findOne({
-                where: {
-                    conversation_id: conversationId,
-                    user_id: req.user.userId
-                }
-            });
+            const conversation = await ConversationService.getConversationById(
+                conversationId,
+                req.user.userId,
+                baseUrl
+            );
 
-            if (!participation) {
-                return res.status(403).json({
-                    error: 'Access denied'
-                });
-            }
-
-            const conversation = await Conversation.findByPk(conversationId, {
-                include: [
-                    {
-                        model: ConversationParticipant,
-                        as: 'participants',
-                        include: [
-                            {
-                                model: User,
-                                as: 'user',
-                                attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
-                            }
-                        ]
-                    }
-                ]
-            });
-
-            if (!conversation) {
-                return res.status(404).json({
-                    error: 'Conversation not found'
-                });
-            }
-
-            res.json({
-                conversation: {
-                    id: conversation.id,
-                    type: conversation.type,
-                    name: conversation.name,
-                    group_image: conversation.group_image,
-                    participants: conversation.participants.map(p => ({
-                        ...p.user.toJSON(),
-                        avatarUrl: buildAvatarUrl(p.user.avatarUrl, req),
-                    })),
-                    created_at: conversation.created_at
-                }
-            });
+            res.json({ conversation });
         } catch (error) {
             console.error('Get conversation error:', error);
-            res.status(500).json({
-                error: 'Internal server error'
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
             });
         }
     }
@@ -352,55 +113,21 @@ class ConversationController {
             }
 
             const { conversationId } = req.params;
-            const { name, group_image } = req.body;
 
-            // Check if user is participant
-            const participation = await ConversationParticipant.findOne({
-                where: {
-                    conversation_id: conversationId,
-                    user_id: req.user.userId
-                }
-            });
-
-            if (!participation) {
-                return res.status(403).json({
-                    error: 'Access denied'
-                });
-            }
-
-            const conversation = await Conversation.findByPk(conversationId);
-
-            if (!conversation) {
-                return res.status(404).json({
-                    error: 'Conversation not found'
-                });
-            }
-
-            if (conversation.type !== 'group') {
-                return res.status(400).json({
-                    error: 'Can only update group conversations'
-                });
-            }
-
-            // Update conversation
-            await conversation.update({
-                name: name || conversation.name,
-                group_image: group_image !== undefined ? group_image : conversation.group_image
-            });
+            const conversation = await ConversationService.updateConversation(
+                conversationId,
+                req.user.userId,
+                req.body
+            );
 
             res.json({
                 message: 'Conversation updated successfully',
-                conversation: {
-                    id: conversation.id,
-                    type: conversation.type,
-                    name: conversation.name,
-                    group_image: conversation.group_image
-                }
+                conversation
             });
         } catch (error) {
             console.error('Update conversation error:', error);
-            res.status(500).json({
-                error: 'Internal server error'
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
             });
         }
     }
@@ -410,40 +137,15 @@ class ConversationController {
         try {
             const { conversationId } = req.params;
 
-            const participation = await ConversationParticipant.findOne({
-                where: {
-                    conversation_id: conversationId,
-                    user_id: req.user.userId
-                }
-            });
-
-            if (!participation) {
-                return res.status(404).json({
-                    error: 'You are not a participant in this conversation'
-                });
-            }
-
-            await participation.destroy();
-
-            // Check if conversation has no participants left
-            const remainingParticipants = await ConversationParticipant.count({
-                where: { conversation_id: conversationId }
-            });
-
-            if (remainingParticipants === 0) {
-                // Delete conversation if no participants left
-                await Conversation.destroy({
-                    where: { id: conversationId }
-                });
-            }
+            await ConversationService.leaveConversation(conversationId, req.user.userId);
 
             res.json({
                 message: 'Left conversation successfully'
             });
         } catch (error) {
             console.error('Leave conversation error:', error);
-            res.status(500).json({
-                error: 'Internal server error'
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
             });
         }
     }

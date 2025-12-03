@@ -1,21 +1,16 @@
-const jwt = require('jsonwebtoken');
-const { User, Conversation, ConversationParticipant, Message } = require('../models');
+const AuthService = require('../services/authService');
+const ConversationService = require('../services/conversationService');
 
 const socketHandlers = (socket, io) => {
     // Authentication middleware for socket
     socket.on('authenticate', async (data) => {
         try {
             const { token } = data;
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            const user = await User.findByPk(decoded.userId);
-            if (!user) {
-                socket.emit('auth_error', { message: 'User not found' });
-                return;
-            }
+            const user = await AuthService.validateSocketToken(token);
 
-            socket.userId = decoded.userId;
-            socket.username = decoded.username;
+            socket.userId = user.userId;
+            socket.username = user.username;
 
             socket.join(`user_${socket.userId}`);
             socket.emit('authenticated', {
@@ -41,14 +36,9 @@ const socketHandlers = (socket, io) => {
             const { conversationId } = data;
 
             // Check if user is participant in this conversation
-            const participation = await ConversationParticipant.findOne({
-                where: {
-                    conversation_id: conversationId,
-                    user_id: socket.userId
-                }
-            });
+            const isParticipant = await ConversationService.isParticipant(conversationId, socket.userId);
 
-            if (!participation) {
+            if (!isParticipant) {
                 socket.emit('error', { message: 'Access denied to conversation' });
                 return;
             }
