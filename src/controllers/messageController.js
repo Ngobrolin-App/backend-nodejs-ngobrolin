@@ -144,14 +144,14 @@ class MessageController {
                 });
 
                 const payload = {
-                  conversationId,
-                  lastMessage: {
-                    id: messageWithSender.id,
-                    content: messageWithSender.type !== 'text' ? buildAvatarUrl(messageWithSender.content, req) : messageWithSender.content,
-                    created_at: messageWithSender.created_at,
-                    sender_id: messageWithSender.sender_id,
-                    type: messageWithSender.type,
-                  }
+                    conversationId,
+                    lastMessage: {
+                        id: messageWithSender.id,
+                        content: messageWithSender.type !== 'text' ? buildAvatarUrl(messageWithSender.content, req) : messageWithSender.content,
+                        created_at: messageWithSender.created_at,
+                        sender_id: messageWithSender.sender_id,
+                        type: messageWithSender.type,
+                    }
                 };
 
                 participants.forEach(p => {
@@ -159,43 +159,43 @@ class MessageController {
                 });
 
                 try {
-                  const recipientIds = participants.map(p => p.user_id).filter(id => id !== req.user.userId);
-                  if (recipientIds.length > 0) {
-                    const tokens = await FCMToken.findAll({
-                      where: { user_id: { [Op.in]: recipientIds } },
-                      attributes: ['token']
-                    });
-                    const tokenList = tokens.map(t => t.token);
-                    if (tokenList.length > 0) {
-                      const notifBody = messageWithSender.type === 'text' ? messageWithSender.content : 'Sent an attachment';
-                      const validTokens = tokenList.filter(t => typeof t === 'string' && t.length > 0);
-                      if (validTokens.length > 0) {
-                        const result = await admin.messaging().sendEachForMulticast({
-                          tokens: validTokens,
-                          notification: {
-                            title: messageWithSender.sender.name || messageWithSender.sender.username || 'New message',
-                            body: notifBody
-                          },
-                          data: {
-                            userId: String(messageWithSender.sender_id || ''),
-                            name: String((messageWithSender.sender.name || messageWithSender.sender.username || '')),
-                            avatarUrl: String(buildAvatarUrl(messageWithSender.sender.avatarUrl, req) || ''),
-                            conversationId: String(conversationId || '')
-                          }
+                    const recipientIds = participants.map(p => p.user_id).filter(id => id !== req.user.userId);
+                    if (recipientIds.length > 0) {
+                        const tokens = await FCMToken.findAll({
+                            where: { user_id: { [Op.in]: recipientIds } },
+                            attributes: ['token']
                         });
-                        const invalidIndexes = result.responses
-                          .map((r, idx) => ({ r, idx }))
-                          .filter(x => !x.r.success && x.r.error && x.r.error.code === 'messaging/registration-token-not-registered')
-                          .map(x => x.idx);
-                        if (invalidIndexes.length > 0) {
-                          const toDelete = invalidIndexes.map(i => validTokens[i]);
-                          await FCMToken.destroy({ where: { token: { [Op.in]: toDelete } } });
+                        const tokenList = tokens.map(t => t.token);
+                        if (tokenList.length > 0) {
+                            const notifBody = messageWithSender.type === 'text' ? messageWithSender.content : 'Sent an attachment';
+                            const validTokens = tokenList.filter(t => typeof t === 'string' && t.length > 0);
+                            if (validTokens.length > 0) {
+                                const result = await admin.messaging().sendEachForMulticast({
+                                    tokens: validTokens,
+                                    notification: {
+                                        title: messageWithSender.sender.name || messageWithSender.sender.username || 'New message',
+                                        body: notifBody
+                                    },
+                                    data: {
+                                        userId: String(messageWithSender.sender_id || ''),
+                                        name: String((messageWithSender.sender.name || messageWithSender.sender.username || '')),
+                                        avatarUrl: String(buildAvatarUrl(messageWithSender.sender.avatarUrl, req) || ''),
+                                        conversationId: String(conversationId || '')
+                                    }
+                                });
+                                const invalidIndexes = result.responses
+                                    .map((r, idx) => ({ r, idx }))
+                                    .filter(x => !x.r.success && x.r.error && x.r.error.code === 'messaging/registration-token-not-registered')
+                                    .map(x => x.idx);
+                                if (invalidIndexes.length > 0) {
+                                    const toDelete = invalidIndexes.map(i => validTokens[i]);
+                                    await FCMToken.destroy({ where: { token: { [Op.in]: toDelete } } });
+                                }
+                            }
                         }
-                      }
                     }
-                  }
                 } catch (e) {
-                  console.error('FCM send error:', e);
+                    console.error('FCM send error:', e);
                 }
             }
 
@@ -409,6 +409,12 @@ class MessageController {
                 req.io.to(`conversation_${conversationId}`).emit('messages_read', {
                     userId: req.user.userId,
                     messageId: messageId
+                });
+
+                // Emit to user's personal room to update ChatList (unread count -> 0)
+                req.io.to(`user_${req.user.userId}`).emit('conversation_read_by_me', {
+                    conversationId,
+                    lastReadMessageId: messageId
                 });
             }
 
