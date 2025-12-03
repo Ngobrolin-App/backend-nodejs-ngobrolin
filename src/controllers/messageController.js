@@ -1,5 +1,6 @@
-const { Message, Conversation, ConversationParticipant, User } = require('../models');
+const { Message, Conversation, ConversationParticipant, User, FCMToken } = require('../models');
 const { Op } = require('sequelize');
+const { admin } = require('../config/firebase');
 const { validationResult } = require('express-validator');
 
 function buildAvatarUrl(path, req) {
@@ -156,6 +157,46 @@ class MessageController {
                 participants.forEach(p => {
                     req.io.to(`user_${p.user_id}`).emit('conversation_updated', payload);
                 });
+
+                try {
+                  const recipientIds = participants.map(p => p.user_id).filter(id => id !== req.user.userId);
+                  if (recipientIds.length > 0) {
+                    const tokens = await FCMToken.findAll({
+                      where: { user_id: { [Op.in]: recipientIds } },
+                      attributes: ['token']
+                    });
+                    const tokenList = tokens.map(t => t.token);
+                    if (tokenList.length > 0) {
+                      const notifBody = messageWithSender.type === 'text' ? messageWithSender.content : 'Sent an attachment';
+                      const validTokens = tokenList.filter(t => typeof t === 'string' && t.length > 0);
+                      if (validTokens.length > 0) {
+                        const result = await admin.messaging().sendEachForMulticast({
+                          tokens: validTokens,
+                          notification: {
+                            title: messageWithSender.sender.name || messageWithSender.sender.username || 'New message',
+                            body: notifBody
+                          },
+                          data: {
+                            userId: String(messageWithSender.sender_id || ''),
+                            name: String((messageWithSender.sender.name || messageWithSender.sender.username || '')),
+                            avatarUrl: String(buildAvatarUrl(messageWithSender.sender.avatarUrl, req) || ''),
+                            conversationId: String(conversationId || '')
+                          }
+                        });
+                        const invalidIndexes = result.responses
+                          .map((r, idx) => ({ r, idx }))
+                          .filter(x => !x.r.success && x.r.error && x.r.error.code === 'messaging/registration-token-not-registered')
+                          .map(x => x.idx);
+                        if (invalidIndexes.length > 0) {
+                          const toDelete = invalidIndexes.map(i => validTokens[i]);
+                          await FCMToken.destroy({ where: { token: { [Op.in]: toDelete } } });
+                        }
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.error('FCM send error:', e);
+                }
             }
 
             res.status(201).json({

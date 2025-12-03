@@ -11,12 +11,14 @@ const fs = require('fs');
 // Database and models
 const { sequelize } = require('./config/database');
 require('./models'); // This will load all models and associations
+require('./config/firebase');
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const conversationRoutes = require('./routes/conversations');
 const messageRoutes = require('./routes/messages');
+const notificationRoutes = require('./routes/notifications');
 
 // Import socket handlers
 const socketHandlers = require('./socket/socketHandlers');
@@ -60,6 +62,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
