@@ -98,32 +98,24 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
     try {
-        // Test database connection
+        // 1️⃣ Cek koneksi database (WAJIB, AMAN)
         await sequelize.authenticate();
         console.log('✅ Database connection established successfully.');
 
-        // Sync database (create tables if they don't exist)
-        if (process.env.NODE_ENV === 'development') {
-            await sequelize.sync({ alter: true });
-            console.log('✅ Database synchronized successfully.');
-        } else {
-            await sequelize.sync();
-            console.log('✅ Database synchronized successfully.');
-        }
-
-        // Start server
-        // server.listen(PORT, () => {
+        // 2️⃣ Start HTTP + Socket server
         server.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
         });
+
     } catch (error) {
-        console.error('❌ Unable to start server:', error);
+        console.error('❌ Failed to start server:', error);
         process.exit(1);
     }
 }
 
 startServer();
+
 
 module.exports = { app, server, io };
