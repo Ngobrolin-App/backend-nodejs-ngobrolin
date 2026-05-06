@@ -45,9 +45,6 @@ jspm_packages/
 # dotenv environment variables file
 .env
 
-# database config
-config/config.json
-
 # IDE files
 .vscode/
 .idea/
