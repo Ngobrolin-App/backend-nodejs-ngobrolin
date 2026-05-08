@@ -28,7 +28,11 @@ pipeline {
             steps {
 
                 sh '''
-                rsync -rlptDv --delete \
+                rsync -rlptDv \
+                --delete \
+                --no-perms \
+                --no-owner \
+                --no-group \
                 --exclude=node_modules \
                 --exclude=.git \
                 --exclude=.env \
