@@ -1,16 +1,19 @@
 pipeline {
     agent any
 
+    environment {
+        APP_DIR = '/opt/ngobrolin-app'
+        PM2_APP_NAME = 'ngobrolin-app'
+    }
+
     stages {
 
         stage('Check Environment') {
             steps {
-
                 sh 'whoami'
                 sh 'pwd'
                 sh 'node -v'
                 sh 'npm -v'
-
             }
         }
 
@@ -27,7 +30,6 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-
                 sh '''
                 rsync -rDv \
                 --delete \
@@ -38,43 +40,36 @@ pipeline {
                 --exclude=.git \
                 --exclude=.env \
                 --exclude=uploads \
-                ./ /opt/ngobrolin-app/
+                ./ ${APP_DIR}/
                 '''
-
             }
         }
 
         stage('Install Dependencies') {
             steps {
-
                 sh '''
-                cd /opt/ngobrolin-app
+                cd ${APP_DIR}
 
-                npm install
+                npm ci
                 '''
-
             }
         }
 
         stage('Run Migration') {
             steps {
-
                 sh '''
-                cd /opt/ngobrolin-app
+                cd ${APP_DIR}
 
                 npx sequelize-cli db:migrate
                 '''
-
             }
         }
 
         stage('Restart PM2') {
             steps {
-
                 sh '''
-                sudo -u yudhah52 pm2 restart ngobrolin-app
+                sudo -u yudhah52 pm2 restart ${PM2_APP_NAME}
                 '''
-
             }
         }
 
