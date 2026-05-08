@@ -14,15 +14,16 @@ pipeline {
             }
         }
 
-        stage('Clone Repository') {
-            steps {
+        // already auto checkout by jenkins pipeline from scm, so no need to clone again
+        // stage('Clone Repository') {
+        //     steps {
 
-                git branch: 'main',
-                credentialsId: 'github-yudhah52',
-                url: 'https://github.com/Ngobrolin-App/backend-nodejs-ngobrolin.git'
+        //         git branch: 'main',
+        //         credentialsId: 'github-yudhah52',
+        //         url: 'https://github.com/Ngobrolin-App/backend-nodejs-ngobrolin.git'
 
-            }
-        }
+        //     }
+        // }
 
         stage('Deploy to Production') {
             steps {
