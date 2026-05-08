@@ -28,7 +28,7 @@ pipeline {
             steps {
 
                 sh '''
-                rsync -av --delete \
+                rsync -rlptDv --delete \
                 --exclude=node_modules \
                 --exclude=.git \
                 --exclude=.env \
