@@ -28,7 +28,7 @@ pipeline {
             steps {
 
                 sh '''
-                rsync -rlptDv \
+                rsync -rDv \
                 --delete \
                 --no-perms \
                 --no-owner \
