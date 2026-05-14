@@ -1,6 +1,9 @@
-const { User } = require('../models');
+const { User, sequelize } = require('../models');
 const { hashPassword, comparePassword, generateToken, verifyToken } = require('../utils/auth');
 const { buildAvatarUrl } = require('../utils/urlHelper');
+const { sendEmail } = require('../utils/email');
+const crypto = require('crypto');
+const { Op } = require('sequelize');
 
 class AuthService {
     /**
@@ -155,6 +158,101 @@ class AuthService {
         await user.save();
 
         return { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, baseUrl) };
+    }
+    /**
+     * Forgot Password
+     */
+    static async forgotPassword(email) {
+        // Find user by email
+        const user = await User.findOne({ where: { email } });
+
+        if (!user) {
+            // Return success anyway to prevent email enumeration
+            return { message: 'If the email exists, reset link has been sent' };
+        }
+
+        // Generate secure random token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        // Hash token for database storage
+        const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+        // Set expiry to 1 hour from now
+        const expiry = new Date(Date.now() + 60 * 60 * 1000);
+
+        // Save token to DB
+        user.resetPasswordToken = hashedToken;
+        user.resetPasswordExpires = expiry;
+        await user.save();
+
+        // Create reset URL
+        // In a real app, this might be a deep link like ngobrolin://reset-password?token=...
+        // For now, we'll use an environment variable or generic fallback
+        const frontendUrl = process.env.FRONTEND_RESET_URL || 'ngobrolin://reset-password';
+        const resetUrl = `${frontendUrl}?token=${resetToken}`;
+
+        // Send email
+        const message = `
+            <h1>Password Reset Request</h1>
+            <p>You requested to reset your password. Please click the link below to reset it:</p>
+            <a href="${resetUrl}">Reset Password</a>
+            <p>If you did not request this, please ignore this email.</p>
+            <p>This link will expire in 1 hour.</p>
+        `;
+
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: 'Password Reset - Ngobrolin App',
+                html: message
+            });
+        } catch (error) {
+            user.resetPasswordToken = null;
+            user.resetPasswordExpires = null;
+            await user.save();
+
+            console.error('Email send error:', error);
+            const err = new Error('There was an error sending the email. Try again later.');
+            err.statusCode = 500;
+            throw err;
+        }
+
+        return { message: 'If the email exists, reset link has been sent' };
+    }
+
+    /**
+     * Reset Password
+     */
+    static async resetPassword(token, newPassword) {
+        // Hash the incoming token to compare with database
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Find user with token and check expiry
+        const user = await User.findOne({
+            where: {
+                resetPasswordToken: hashedToken,
+                resetPasswordExpires: {
+                    [Op.gt]: new Date()
+                }
+            }
+        });
+
+        if (!user) {
+            const error = new Error('Token is invalid or has expired');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Hash new password
+        const newHashedPassword = await hashPassword(newPassword);
+
+        // Update user
+        user.password = newHashedPassword;
+        user.resetPasswordToken = null;
+        user.resetPasswordExpires = null;
+        await user.save();
+
+        return { message: 'Password has been reset successfully' };
     }
 }
 

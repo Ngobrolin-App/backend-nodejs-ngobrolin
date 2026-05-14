@@ -107,6 +107,50 @@ class AuthController {
             });
         }
     }
+
+    // Forgot Password
+    static async forgotPassword(req, res) {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    details: errors.array()
+                });
+            }
+
+            const result = await AuthService.forgotPassword(req.body.email);
+
+            res.json(result);
+        } catch (error) {
+            console.error('Forgot password error:', error);
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
+            });
+        }
+    }
+
+    // Reset Password
+    static async resetPassword(req, res) {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    details: errors.array()
+                });
+            }
+
+            const result = await AuthService.resetPassword(req.body.token, req.body.newPassword);
+
+            res.json(result);
+        } catch (error) {
+            console.error('Reset password error:', error);
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
+            });
+        }
+    }
 }
 
 module.exports = AuthController;
