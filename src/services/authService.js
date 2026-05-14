@@ -200,22 +200,17 @@ class AuthService {
             <p>This link will expire in 1 hour.</p>
         `;
 
-        try {
-            await sendEmail({
-                to: user.email,
-                subject: 'Password Reset - Ngobrolin App',
-                html: message
-            });
-        } catch (error) {
+        sendEmail({
+            to: user.email,
+            subject: 'Password Reset - Ngobrolin App',
+            html: message
+        }).catch(async (error) => {
+            console.error('Email send background error:', error);
+            // Revert token if email failed
             user.resetPasswordToken = null;
             user.resetPasswordExpires = null;
             await user.save();
-
-            console.error('Email send error:', error);
-            const err = new Error('There was an error sending the email. Try again later.');
-            err.statusCode = 500;
-            throw err;
-        }
+        });
 
         return { message: 'If the email exists, reset link has been sent' };
     }
