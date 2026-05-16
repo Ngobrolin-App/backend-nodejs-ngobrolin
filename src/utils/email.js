@@ -2,9 +2,7 @@ const brevo = require('@getbrevo/brevo');
 
 const sendEmail = async ({ to, subject, html }) => {
     let apiInstance = new brevo.TransactionalEmailsApi();
-
-    let apiKey = apiInstance.authentications['apiKey'];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
+    apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
     let sendSmtpEmail = new brevo.SendSmtpEmail();
 
@@ -20,7 +18,7 @@ const sendEmail = async ({ to, subject, html }) => {
         const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
         return data;
     } catch (error) {
-        console.error('Brevo API Error:', error);
+        console.error('Brevo API Error Details:', error.response ? error.response.body : error.message || error);
         throw error;
     }
 };
