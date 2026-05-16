@@ -1,24 +1,28 @@
-const nodemailer = require('nodemailer');
+const brevo = require('@getbrevo/brevo');
 
 const sendEmail = async ({ to, subject, html }) => {
-    // Create reusable transporter object using the default SMTP transport
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-        }
-    });
+    let apiInstance = new brevo.TransactionalEmailsApi();
 
-    // Send mail with defined transport object
-    const info = await transporter.sendMail({
-        from: `"${process.env.APP_NAME || 'Ngobrolin App'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-        to,
-        subject,
-        html
-    });
+    let apiKey = apiInstance.authentications['apiKey'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    return info;
+    let sendSmtpEmail = new brevo.SendSmtpEmail();
+
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+    sendSmtpEmail.sender = {
+        name: process.env.APP_NAME || 'Ngobrolin App',
+        email: process.env.EMAIL_SENDER || 'ngobrolinapp@gmail.com'
+    };
+    sendSmtpEmail.to = [{ email: to }];
+
+    try {
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        return data;
+    } catch (error) {
+        console.error('Brevo API Error:', error);
+        throw error;
+    }
 };
 
 module.exports = { sendEmail };
