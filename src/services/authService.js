@@ -200,22 +200,19 @@ class AuthService {
             <p>This link will expire in 1 hour.</p>
         `;
 
-        try {
-            await sendEmail({
-                to: user.email,
-                subject: 'Password Reset - Ngobrolin App',
-                html: message
-            });
-        } catch (error) {
+        // Send email asynchronously so we don't block the frontend response
+        sendEmail({
+            to: user.email,
+            subject: 'Password Reset - Ngobrolin App',
+            html: message
+        }).catch(async (error) => {
+            console.error('Email send error (background):', error);
+            // Optional: You could revert the token here if you strictly want to
+            // But usually, it's fine to just let the user try again
             user.resetPasswordToken = null;
             user.resetPasswordExpires = null;
-            await user.save();
-
-            console.error('Email send error:', error);
-            const err = new Error('There was an error sending the email. Try again later.');
-            err.statusCode = 500;
-            throw err;
-        }
+            await user.save().catch(e => console.error('Failed to revert token:', e));
+        });
 
         return { message: 'If the email exists, reset link has been sent' };
     }
