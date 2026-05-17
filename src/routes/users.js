@@ -14,6 +14,10 @@ const updateProfileValidation = [
         .isLength({ min: 1, max: 100 })
         .withMessage('Name must be between 1 and 100 characters')
         .trim(),
+    body('email')
+        .optional()
+        .isEmail()
+        .withMessage('Must be a valid email address'),
     body('bio')
         .optional()
         .isLength({ max: 500 })

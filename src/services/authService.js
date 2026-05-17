@@ -31,15 +31,26 @@ class AuthService {
      * Register new user
      */
     static async register(userData, baseUrl) {
-        const { username, name, password } = userData;
+        const { username, email, name, password } = userData;
 
         // Check if username already exists
-        const existingUser = await User.findOne({
+        const existingUsername = await User.findOne({
             where: { username }
         });
 
-        if (existingUser) {
+        if (existingUsername) {
             const error = new Error('Username already exists');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Check if email already exists
+        const existingEmail = await User.findOne({
+            where: { email }
+        });
+
+        if (existingEmail) {
+            const error = new Error('Email already exists');
             error.statusCode = 400;
             throw error;
         }
@@ -50,6 +61,7 @@ class AuthService {
         // Create user
         const newUser = await User.create({
             username,
+            email,
             name,
             password: hashedPassword
         });
@@ -116,7 +128,7 @@ class AuthService {
      * Update user profile
      */
     static async updateProfile(userId, updateData, file, baseUrl) {
-        const { name, bio, language, isPrivate, currentPassword, newPassword, avatarUrl } = updateData;
+        const { name, email, bio, language, isPrivate, currentPassword, newPassword, avatarUrl } = updateData;
 
         const user = await User.findByPk(userId);
 
@@ -124,6 +136,17 @@ class AuthService {
             const error = new Error('User not found');
             error.statusCode = 404;
             throw error;
+        }
+
+        // Check if email already exists and belongs to another user
+        if (email && email !== user.email) {
+            const existingEmail = await User.findOne({ where: { email } });
+            if (existingEmail) {
+                const error = new Error('Email already exists');
+                error.statusCode = 400;
+                throw error;
+            }
+            user.email = email;
         }
 
         // Handle password change if provided
