@@ -47,7 +47,6 @@ class UserService {
 
         const users = await User.findAndCountAll({
             where: whereClause,
-            attributes: ['id', 'username', 'name', 'bio', 'avatarUrl', 'isPrivate'],
             limit: parseInt(limit),
             offset: parseInt(offset),
             order: [['name', 'ASC']]
@@ -82,9 +81,7 @@ class UserService {
             throw error;
         }
 
-        const user = await User.findByPk(targetUserId, {
-            attributes: ['id', 'username', 'name', 'bio', 'avatarUrl', 'isPrivate']
-        });
+        const user = await User.findByPk(targetUserId);
 
         if (!user) {
             const error = new Error('User not found');
@@ -169,7 +166,6 @@ class UserService {
             include: [{
                 model: User,
                 as: 'blockedUser',
-                attributes: ['id', 'username', 'name', 'avatarUrl']
             }],
             limit: parseInt(limit),
             offset: parseInt(offset),
@@ -178,11 +174,8 @@ class UserService {
 
         return {
             blockedUsers: blockedUsers.rows.map(b => ({
-                ...b.toJSON(),
-                blockedUser: {
-                    ...b.blockedUser.toJSON(),
-                    avatarUrl: buildAvatarUrl(b.blockedUser.avatarUrl, baseUrl),
-                }
+                ...b.blockedUser.toJSON(),
+                avatarUrl: buildAvatarUrl(b.blockedUser.avatarUrl, baseUrl),
             })),
             total: blockedUsers.count,
             page: parseInt(page),

@@ -47,7 +47,15 @@ const searchValidation = [
         .notEmpty()
         .withMessage('Search query is required')
         .isLength({ min: 1, max: 50 })
-        .withMessage('Search query must be between 1 and 50 characters')
+        .withMessage('Search query must be between 1 and 50 characters'),
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100')
 ];
 
 const getUserValidation = [

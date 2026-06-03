@@ -107,10 +107,10 @@ class ConversationService {
 
         return {
             conversations: formattedConversations,
-            total: conversations.count,
+            total: formattedConversations.length,
             page: parseInt(page),
             limit: parseInt(limit),
-            totalPages: Math.ceil(conversations.count / limit)
+            totalPages: Math.ceil(formattedConversations.length / limit)
         };
     }
 
