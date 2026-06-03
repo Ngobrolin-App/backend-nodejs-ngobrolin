@@ -43,8 +43,6 @@ const Message = sequelize.define('Message', {
     }
 }, {
     tableName: 'tblmessages',
-    timestamps: true,
-    createdAt: 'created_at',
     updatedAt: false,
     indexes: [
         {

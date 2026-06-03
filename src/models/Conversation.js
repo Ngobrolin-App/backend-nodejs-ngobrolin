@@ -28,8 +28,6 @@ const Conversation = sequelize.define('Conversation', {
     }
 }, {
     tableName: 'tblconversations',
-    timestamps: true,
-    createdAt: 'created_at',
     updatedAt: false
 });
 

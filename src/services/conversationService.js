@@ -114,6 +114,36 @@ class ConversationService {
         };
     }
 
+    static async getConversationParticipants(userId, conversationId, isIncludeMe = true, baseUrl) {
+        const userWhere = {};
+
+        if (!isIncludeMe) {
+            userWhere.id = {
+                [Op.ne]: userId
+            };
+        }
+
+        const participantRows = await ConversationParticipant.findAll({
+            where: { conversation_id: conversationId },
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    where: userWhere,
+                    attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
+                }
+            ]
+        });
+
+        return {
+            participants: participantRows.map(p => ({
+                ...p.user.toJSON(),
+                avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
+                conversationId: conversationId,
+            })),
+        }
+    }
+
     /**
      * Create a new conversation
      */
@@ -262,7 +292,7 @@ class ConversationService {
     /**
      * Get conversation by ID
      */
-    static async getConversationById(conversationId, userId, baseUrl) {
+    static async getConversationById(conversationId, userId, isShowParticipants = true, isParticipantsIncludeMe = true, baseUrl) {
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
@@ -277,8 +307,15 @@ class ConversationService {
             throw error;
         }
 
+        const userWhere = {};
+        if (!isParticipantsIncludeMe) {
+            userWhere.id = {
+                [Op.ne]: userId
+            };
+        }
+
         const conversation = await Conversation.findByPk(conversationId, {
-            include: [
+            include: isShowParticipants ? [
                 {
                     model: ConversationParticipant,
                     as: 'participants',
@@ -286,11 +323,12 @@ class ConversationService {
                         {
                             model: User,
                             as: 'user',
+                            where: userWhere,
                             attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
                         }
                     ]
                 }
-            ]
+            ] : undefined
         });
 
         if (!conversation) {
@@ -299,17 +337,22 @@ class ConversationService {
             throw error;
         }
 
-        return {
+        let result = {
             id: conversation.id,
             type: conversation.type,
             name: conversation.name,
             group_image: conversation.group_image,
-            participants: conversation.participants.map(p => ({
-                ...p.user.toJSON(),
-                avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
-            })),
             created_at: conversation.created_at
         };
+
+        if (isShowParticipants && conversation.participants) {
+            result.participants = conversation.participants.map(p => ({
+                ...p.user.toJSON(),
+                avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
+            }));
+        }
+
+        return result;
     }
 
     /**

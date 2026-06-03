@@ -69,19 +69,21 @@ const User = sequelize.define('User', {
     }
 }, {
     tableName: 'tbluser',
-    timestamps: true,
-    createdAt: 'createdAt',
-    updatedAt: 'updatedAt',
     indexes: [
         {
             unique: true,
             fields: ['username']
         }
-    ]
+    ],
+    defaultScope: {
+        attributes: {
+            exclude: ['password', 'resetPasswordToken', 'resetPasswordExpires']
+        }
+    }
 });
 
 // Instance methods
-User.prototype.toJSON = function() {
+User.prototype.toJSON = function () {
     const values = Object.assign({}, this.get());
     delete values.password;
     return values;

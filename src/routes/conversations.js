@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, query } = require('express-validator');
 const ConversationController = require('../controllers/conversationController');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -55,15 +55,27 @@ const getConversationValidation = [
         .notEmpty()
         .withMessage('Conversation ID is required')
         .isUUID()
-        .withMessage('Conversation ID must be a valid UUID')
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('isShowParticipants')
+        .optional()
+        .isBoolean()
+        .withMessage('IsShowParticipants must be a boolean')
+        .toBoolean()
+        .default(true),
+    body('isParticipantsIncludeMe')
+        .optional()
+        .isBoolean()
+        .withMessage('IsParticipantsIncludeMe must be a boolean')
+        .toBoolean()
+        .default(true)
 ];
 
 const paginationValidation = [
-    body('page')
+    query('page')
         .optional()
         .isInt({ min: 1 })
         .withMessage('Page must be a positive integer'),
-    body('limit')
+    query('limit')
         .optional()
         .isInt({ min: 1, max: 100 })
         .withMessage('Limit must be between 1 and 100')
@@ -77,8 +89,23 @@ const leaveConversationValidation = [
         .withMessage('Conversation ID must be a valid UUID')
 ];
 
+const getConversationParticipantsValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('isIncludeMe')
+        .optional()
+        .isBoolean()
+        .withMessage('IsIncludeMe must be a boolean')
+        .toBoolean()
+        .default(true)
+];
+
 // Routes - All POST methods
 router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
+router.post('/participants', authenticateToken, getConversationParticipantsValidation, ConversationController.getConversationParticipants);
 router.post('/create', authenticateToken, createConversationValidation, ConversationController.createConversation);
 router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);
 router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);

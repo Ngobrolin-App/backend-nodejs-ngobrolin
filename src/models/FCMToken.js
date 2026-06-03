@@ -25,8 +25,6 @@ const FCMToken = sequelize.define('FCMToken', {
     }
 }, {
     tableName: 'tblfcm_tokens',
-    timestamps: true,
-    createdAt: 'created_at',
     updatedAt: false,
     indexes: [
         {

@@ -83,18 +83,48 @@ class ConversationController {
     // Get conversation by ID
     static async getConversationById(req, res) {
         try {
-            const { conversationId } = req.params;
+            const { conversationId, isShowParticipants = true, isParticipantsIncludeMe = true } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
 
             const conversation = await ConversationService.getConversationById(
                 conversationId,
                 req.user.userId,
+                isShowParticipants,
+                isParticipantsIncludeMe,
                 baseUrl
             );
 
             res.json({ conversation });
         } catch (error) {
             console.error('Get conversation error:', error);
+            res.status(error.statusCode || 500).json({
+                error: error.message || 'Internal server error'
+            });
+        }
+    }
+
+    static async getConversationParticipants(req, res) {
+        try {
+            const { conversationId, isIncludeMe = true } = req.body;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+            console.log("getConversationParticipants isincludeme type", typeof isIncludeMe, isIncludeMe);
+
+
+            const result = await ConversationService.getConversationParticipants(
+                req.user.userId,
+                conversationId,
+                isIncludeMe,
+                baseUrl
+            );
+
+            console.log("getConversationParticipants Result:", result);
+
+            res.json({
+                participants: result.participants,
+            });
+        } catch (error) {
+            console.error('Get conversation participants error:', error);
             res.status(error.statusCode || 500).json({
                 error: error.message || 'Internal server error'
             });
@@ -112,7 +142,7 @@ class ConversationController {
                 });
             }
 
-            const { conversationId } = req.params;
+            const { conversationId } = req.body;
 
             const conversation = await ConversationService.updateConversation(
                 conversationId,

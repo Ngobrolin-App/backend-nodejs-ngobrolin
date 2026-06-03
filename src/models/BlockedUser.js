@@ -25,8 +25,6 @@ const BlockedUser = sequelize.define('BlockedUser', {
     }
 }, {
     tableName: 'tblblocked_users',
-    timestamps: true,
-    createdAt: 'created_at',
     updatedAt: false,
     indexes: [
         {

@@ -33,17 +33,6 @@ class AuthService {
     static async register(userData, baseUrl) {
         const { username, email, name, password } = userData;
 
-        // Check if username already exists
-        const existingUsername = await User.findOne({
-            where: { username }
-        });
-
-        if (existingUsername) {
-            const error = new Error('Username already exists');
-            error.statusCode = 400;
-            throw error;
-        }
-
         // Check if email already exists
         const existingEmail = await User.findOne({
             where: { email }
@@ -51,6 +40,17 @@ class AuthService {
 
         if (existingEmail) {
             const error = new Error('Email already exists');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Check if username already exists
+        const existingUsername = await User.findOne({
+            where: { username }
+        });
+
+        if (existingUsername) {
+            const error = new Error('Username already exists');
             error.statusCode = 400;
             throw error;
         }
@@ -76,18 +76,18 @@ class AuthService {
     }
 
     /**
-     * Login user
+     * Login user with username or email and password
      */
     static async login(credentials, baseUrl) {
-        const { username, password } = credentials;
+        const { usernameOrEmail, password } = credentials;
 
         // Find user
-        const user = await User.findOne({
-            where: { username }
+        const user = await User.unscoped().findOne({
+            where: { [Op.or]: [{ username: usernameOrEmail }, { email: usernameOrEmail }] }
         });
 
         if (!user) {
-            const error = new Error('Invalid credentials');
+            const error = new Error('User with username or email not found');
             error.statusCode = 401;
             throw error;
         }
@@ -95,7 +95,7 @@ class AuthService {
         // Check password
         const isValidPassword = await comparePassword(password, user.password);
         if (!isValidPassword) {
-            const error = new Error('Invalid credentials');
+            const error = new Error('Password is incorrect');
             error.statusCode = 401;
             throw error;
         }
@@ -130,7 +130,7 @@ class AuthService {
     static async updateProfile(userId, updateData, file, baseUrl) {
         const { name, email, bio, language, isPrivate, currentPassword, newPassword, avatarUrl } = updateData;
 
-        const user = await User.findByPk(userId);
+        const user = await User.unscoped().findByPk(userId);
 
         if (!user) {
             const error = new Error('User not found');
@@ -187,11 +187,12 @@ class AuthService {
      */
     static async forgotPassword(email) {
         // Find user by email
-        const user = await User.findOne({ where: { email } });
+        const user = await User.unscoped().findOne({ where: { email } });
 
         if (!user) {
-            // Return success anyway to prevent email enumeration
-            return { message: 'If the email exists, reset link has been sent' };
+            const error = new Error('Email not registered');
+            error.statusCode = 404;
+            throw error;
         }
 
         // Generate secure random token
@@ -248,7 +249,7 @@ class AuthService {
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
         // Find user with token and check expiry
-        const user = await User.findOne({
+        const user = await User.unscoped().findOne({
             where: {
                 resetPasswordToken: hashedToken,
                 resetPasswordExpires: {

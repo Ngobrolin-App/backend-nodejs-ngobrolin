@@ -33,7 +33,6 @@ const ConversationParticipant = sequelize.define('ConversationParticipant', {
     }
 }, {
     tableName: 'tblconversation_participants',
-    timestamps: true,
     createdAt: 'joined_at',
     updatedAt: false,
     indexes: [
