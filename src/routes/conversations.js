@@ -24,7 +24,7 @@ const createConversationValidation = [
         .isLength({ min: 1, max: 100 })
         .withMessage('Group name must be between 1 and 100 characters')
         .trim(),
-    body('group_image')
+    body('groupImage')
         .optional()
         .isURL()
         .withMessage('Group image must be a valid URL')
@@ -41,7 +41,7 @@ const updateConversationValidation = [
         .isLength({ min: 1, max: 100 })
         .withMessage('Name must be between 1 and 100 characters')
         .trim(),
-    body('group_image')
+    body('groupImage')
         .optional()
         .custom((value) => {
             if (value === null || value === '') return true;
@@ -89,6 +89,14 @@ const leaveConversationValidation = [
         .withMessage('Conversation ID must be a valid UUID')
 ];
 
+const privateConversationValidation = [
+    body('partnerId')
+        .notEmpty()
+        .withMessage('Partner ID is required')
+        .isUUID()
+        .withMessage('Partner ID must be a valid UUID')
+];
+
 const getConversationParticipantsValidation = [
     body('conversationId')
         .notEmpty()
@@ -105,6 +113,7 @@ const getConversationParticipantsValidation = [
 
 // Routes - All POST methods
 router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
+router.post('/private-conversation', authenticateToken, privateConversationValidation, ConversationController.getPrivateConversationByParticipantsIds);
 router.post('/participants', authenticateToken, getConversationParticipantsValidation, ConversationController.getConversationParticipants);
 router.post('/create', authenticateToken, createConversationValidation, ConversationController.createConversation);
 router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);

@@ -7,7 +7,7 @@ const FCMToken = sequelize.define('FCMToken', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
     },
-    user_id: {
+    userId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {

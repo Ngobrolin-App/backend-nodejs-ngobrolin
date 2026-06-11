@@ -9,11 +9,11 @@ class NotificationService {
      */
     static async sendNewMessageNotification(participants, senderId, messageRaw, conversationId, baseUrl) {
         try {
-            const recipientIds = participants.map(p => p.user_id).filter(id => id !== senderId);
+            const recipientIds = participants.map(p => p.userId).filter(id => id !== senderId);
             if (recipientIds.length === 0) return;
 
             const tokens = await FCMToken.findAll({
-                where: { user_id: { [Op.in]: recipientIds } },
+                where: { userId: { [Op.in]: recipientIds } },
                 attributes: ['token']
             });
 
@@ -32,7 +32,7 @@ class NotificationService {
                     body: notifBody
                 },
                 data: {
-                    userId: String(messageRaw.sender_id || ''),
+                    userId: String(messageRaw.senderId || ''),
                     name: String((messageRaw.sender.name || messageRaw.sender.username || '')),
                     avatarUrl: String(buildAvatarUrl(messageRaw.sender.avatarUrl, baseUrl) || ''),
                     conversationId: String(conversationId || '')
@@ -62,12 +62,12 @@ class NotificationService {
         const existing = await FCMToken.findOne({ where: { token } });
 
         if (existing) {
-            if (existing.user_id !== userId) {
-                await existing.update({ user_id: userId });
+            if (existing.userId !== userId) {
+                await existing.update({ userId: userId });
             }
             return { message: 'FCM token updated' };
         } else {
-            await FCMToken.create({ user_id: userId, token });
+            await FCMToken.create({ userId: userId, token });
             return { message: 'FCM token registered' };
         }
     }
@@ -79,7 +79,7 @@ class NotificationService {
         await FCMToken.destroy({
             where: {
                 token,
-                user_id: userId
+                userId: userId
             }
         });
         return { message: 'FCM token deleted' };

@@ -7,7 +7,7 @@ const BlockedUser = sequelize.define('BlockedUser', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
     },
-    user_id: {
+    userId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -15,7 +15,7 @@ const BlockedUser = sequelize.define('BlockedUser', {
             key: 'id'
         }
     },
-    blocked_user_id: {
+    blockedUserId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {

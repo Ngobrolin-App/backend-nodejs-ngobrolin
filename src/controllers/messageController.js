@@ -1,6 +1,8 @@
 const { validationResult } = require('express-validator');
 const MessageService = require('../services/messageService');
 const NotificationService = require('../services/notificationService');
+const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/AppError');
 
 class MessageController {
     // Get messages for a conversation
@@ -8,28 +10,38 @@ class MessageController {
         try {
             const { conversationId, page = 1, limit = 50 } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
 
             const result = await MessageService.getMessages(
                 conversationId,
-                req.user.userId,
+                currentUserId,
                 baseUrl,
                 page,
                 limit
             );
 
-            res.json({
-                messages: result.messages,
-                pagination: {
-                    page: result.page,
-                    limit: result.limit,
-                    total: result.total,
-                    totalPages: result.totalPages
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    messages: result.messages,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
                 }
             });
+
         } catch (error) {
-            console.error('Get messages error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('MessageController - getMessages() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -39,17 +51,20 @@ class MessageController {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'validation_failed',
+                    errors: errors.array(),
                 });
             }
 
             const baseUrl = `${req.protocol}://${req.get('host')}`;
             const { conversationId } = req.body;
+            const currentUserId = req.user.userId;
 
             const result = await MessageService.sendMessage(
-                req.user.userId,
+                currentUserId,
                 req.body,
                 baseUrl
             );
@@ -68,14 +83,14 @@ class MessageController {
                     lastMessage: {
                         id: message.id,
                         content: message.content,
-                        created_at: message.created_at,
-                        sender_id: message.sender_id,
+                        createdAt: message.createdAt,
+                        senderId: message.senderId,
                         type: message.type,
                     }
                 };
 
                 participants.forEach(p => {
-                    req.io.to(`user_${p.user_id}`).emit('conversation_updated', payload);
+                    req.io.to(`user_${p.userId}`).emit('conversation_updated', payload);
                 });
 
                 // Send push notification
@@ -88,14 +103,19 @@ class MessageController {
                 );
             }
 
-            res.status(201).json({
-                message: 'Message sent successfully',
-                data: message
+            ApiResponse.success(res, {
+                code: 201,
+                statusCode: 'CREATED',
+                message: 'message_sent_success',
+                data: message,
             });
         } catch (error) {
-            console.error('Send message error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('MessageController - sendMessage() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -107,10 +127,23 @@ class MessageController {
             }
             const type = req.body.type || req.query.type || 'file';
             const url = `/uploads/messages/${req.file.filename}`;
-            res.json({ url, type });
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    url: url,
+                    type: type
+                },
+            });
         } catch (error) {
-            console.error('Upload attachment error:', error);
-            res.status(500).json({ error: 'Internal server error' });
+            console.error('MessageController - uploadAttachment() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
         }
     }
 
@@ -119,9 +152,11 @@ class MessageController {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'validation_failed',
+                    errors: errors.array()
                 });
             }
 
@@ -135,19 +170,24 @@ class MessageController {
 
             // Emit to socket
             if (req.io) {
-                req.io.to(`conversation_${updatedMessage.conversation_id}`).emit('message_updated', {
+                req.io.to(`conversation_${updatedMessage.conversationId}`).emit('message_updated', {
                     message: updatedMessage
                 });
             }
 
-            res.json({
-                message: 'Message updated successfully',
-                data: updatedMessage
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'message_update_success',
+                data: updatedMessage,
             });
         } catch (error) {
-            console.error('Update message error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('MessageController - updateMessage() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -166,13 +206,18 @@ class MessageController {
                 });
             }
 
-            res.json({
-                message: 'Message deleted successfully'
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'message_delete_success',
             });
         } catch (error) {
-            console.error('Delete message error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('MessageController - deleteMessage() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -209,13 +254,18 @@ class MessageController {
                 });
             }
 
-            res.json({
-                message: 'Messages marked as read'
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'messages_marked_as_read',
             });
         } catch (error) {
-            console.error('Mark as read error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('MessageController - markAsRead() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }

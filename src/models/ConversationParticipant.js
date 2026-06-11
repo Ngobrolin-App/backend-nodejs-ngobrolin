@@ -7,7 +7,7 @@ const ConversationParticipant = sequelize.define('ConversationParticipant', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
     },
-    conversation_id: {
+    conversationId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -15,7 +15,7 @@ const ConversationParticipant = sequelize.define('ConversationParticipant', {
             key: 'id'
         }
     },
-    user_id: {
+    userId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -23,7 +23,7 @@ const ConversationParticipant = sequelize.define('ConversationParticipant', {
             key: 'id'
         }
     },
-    last_read_message_id: {
+    lastReadMessageId: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
@@ -33,7 +33,7 @@ const ConversationParticipant = sequelize.define('ConversationParticipant', {
     }
 }, {
     tableName: 'tblconversation_participants',
-    createdAt: 'joined_at',
+    createdAt: 'joinedAt',
     updatedAt: false,
     indexes: [
         {

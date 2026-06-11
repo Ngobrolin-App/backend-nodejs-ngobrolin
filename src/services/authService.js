@@ -2,6 +2,7 @@ const { User, sequelize } = require('../models');
 const { hashPassword, comparePassword, generateToken, verifyToken } = require('../utils/auth');
 const { buildAvatarUrl } = require('../utils/urlHelper');
 const { sendEmail } = require('../utils/email');
+const AppError = require('../utils/AppError');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 
@@ -15,7 +16,13 @@ class AuthService {
             const user = await User.findByPk(decoded.userId);
 
             if (!user) {
-                throw new Error('User not found');
+                throw new AppError(
+                    {
+                        message: 'user_not_found',
+                        code: 404,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                )
             }
 
             return {
@@ -23,7 +30,13 @@ class AuthService {
                 username: user.username
             };
         } catch (error) {
-            throw new Error('Authentication failed');
+            throw new AppError(
+                {
+                    message: 'authentication_failed',
+                    code: 401,
+                    statusCode: 'UNAUTHORIZED'
+                }
+            )
         }
     }
 
@@ -39,9 +52,11 @@ class AuthService {
         });
 
         if (existingEmail) {
-            const error = new Error('Email already exists');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'email_already_exists',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         // Check if username already exists
@@ -50,9 +65,11 @@ class AuthService {
         });
 
         if (existingUsername) {
-            const error = new Error('Username already exists');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'username_already_exists',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         // Hash password
@@ -87,17 +104,21 @@ class AuthService {
         });
 
         if (!user) {
-            const error = new Error('User with username or email not found');
-            error.statusCode = 401;
-            throw error;
+            throw new AppError({
+                message: 'user_with_username_or_email_not_found',
+                code: 401,
+                statusCode: 'UNAUTHORIZED'
+            });
         }
 
         // Check password
         const isValidPassword = await comparePassword(password, user.password);
         if (!isValidPassword) {
-            const error = new Error('Password is incorrect');
-            error.statusCode = 401;
-            throw error;
+            throw new AppError({
+                message: 'password_incorrect',
+                code: 401,
+                statusCode: 'UNAUTHORIZED'
+            });
         }
 
         // Generate token
@@ -116,12 +137,16 @@ class AuthService {
         const user = await User.findByPk(userId);
 
         if (!user) {
-            const error = new Error('User not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'user_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
-        return { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, baseUrl) };
+        const result = { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, baseUrl) };
+
+        return result;
     }
 
     /**
@@ -133,18 +158,22 @@ class AuthService {
         const user = await User.unscoped().findByPk(userId);
 
         if (!user) {
-            const error = new Error('User not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'user_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
         // Check if email already exists and belongs to another user
         if (email && email !== user.email) {
             const existingEmail = await User.findOne({ where: { email } });
             if (existingEmail) {
-                const error = new Error('Email already exists');
-                error.statusCode = 400;
-                throw error;
+                throw new AppError({
+                    message: 'email_already_exists',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST'
+                });
             }
             user.email = email;
         }
@@ -153,9 +182,11 @@ class AuthService {
         if (currentPassword && newPassword) {
             const isValidPassword = await comparePassword(currentPassword, user.password);
             if (!isValidPassword) {
-                const error = new Error('Current password is incorrect');
-                error.statusCode = 401;
-                throw error;
+                throw new AppError({
+                    message: 'current_password_incorrect',
+                    code: 401,
+                    statusCode: 'UNAUTHORIZED'
+                });
             }
             const hashedPassword = await hashPassword(newPassword);
             user.password = hashedPassword;
@@ -190,9 +221,11 @@ class AuthService {
         const user = await User.unscoped().findOne({ where: { email } });
 
         if (!user) {
-            const error = new Error('Email not registered');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'email_not_registered',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
         // Generate secure random token
@@ -225,20 +258,27 @@ class AuthService {
         `;
 
         // Send email asynchronously so we don't block the frontend response
-        sendEmail({
-            to: user.email,
-            subject: 'Password Reset - Ngobrolin App',
-            html: message
-        }).catch(async (error) => {
-            console.error('Email send error (background):', error);
-            // Optional: You could revert the token here if you strictly want to
-            // But usually, it's fine to just let the user try again
+        try {
+            await sendEmail({
+                to: user.email,
+                subject: 'Password Reset - Ngobrolin App',
+                html: message
+            })
+
+            return { message: 'reset_password_email_sent_success' };
+        } catch (error) {
+            console.error('AuthService - forgotPassword() :', error);
+
             user.resetPasswordToken = null;
             user.resetPasswordExpires = null;
             await user.save().catch(e => console.error('Failed to revert token:', e));
-        });
 
-        return { message: 'If the email exists, reset link has been sent' };
+            throw new AppError({
+                message: 'reset_password_email_sent_failed',
+                code: 500,
+                statusCode: 'INTERNAL_SERVER_ERROR'
+            });
+        }
     }
 
     /**
@@ -259,9 +299,11 @@ class AuthService {
         });
 
         if (!user) {
-            const error = new Error('Token is invalid or has expired');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'token_invalid_or_expired',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         // Hash new password
@@ -273,7 +315,7 @@ class AuthService {
         user.resetPasswordExpires = null;
         await user.save();
 
-        return { message: 'Password has been reset successfully' };
+        return { message: 'password_reset_success_desc' };
     }
 }
 

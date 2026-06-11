@@ -1,6 +1,8 @@
 const { User, BlockedUser } = require('../models');
 const { Op } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
+const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/AppError');
 
 class UserService {
     /**
@@ -28,14 +30,14 @@ class UserService {
         const blockedUsers = await BlockedUser.findAll({
             where: {
                 [Op.or]: [
-                    { user_id: currentUserId },
-                    { blocked_user_id: currentUserId }
+                    { userId: currentUserId },
+                    { blockedUserId: currentUserId }
                 ]
             }
         });
 
         const blockedUserIds = blockedUsers.map(block =>
-            block.user_id === currentUserId ? block.blocked_user_id : block.user_id
+            block.userId === currentUserId ? block.blockedUserId : block.userId
         );
 
         if (blockedUserIds.length > 0) {
@@ -69,24 +71,28 @@ class UserService {
         const isBlocked = await BlockedUser.findOne({
             where: {
                 [Op.or]: [
-                    { user_id: currentUserId, blocked_user_id: targetUserId },
-                    { user_id: targetUserId, blocked_user_id: currentUserId }
+                    { userId: currentUserId, blockedUserId: targetUserId },
+                    { userId: targetUserId, blockedUserId: currentUserId }
                 ]
             }
         });
 
         if (isBlocked) {
-            const error = new Error('User is blocked');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError({
+                message: 'user_is_blocked',
+                code: 403,
+                statusCode: 'FORBIDDEN'
+            });
         }
 
         const user = await User.findByPk(targetUserId);
 
         if (!user) {
-            const error = new Error('User not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'user_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
         return { ...user.toJSON(), avatarUrl: buildAvatarUrl(user.avatarUrl, baseUrl) };
@@ -97,37 +103,43 @@ class UserService {
      */
     static async blockUser(currentUserId, targetUserId) {
         if (targetUserId === currentUserId) {
-            const error = new Error('Cannot block yourself');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'cannot_block_yourself',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         // Check if user exists
         const userToBlock = await User.findByPk(targetUserId);
         if (!userToBlock) {
-            const error = new Error('User not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'user_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
         // Check if already blocked
         const existingBlock = await BlockedUser.findOne({
             where: {
-                user_id: currentUserId,
-                blocked_user_id: targetUserId
+                userId: currentUserId,
+                blockedUserId: targetUserId
             }
         });
 
         if (existingBlock) {
-            const error = new Error('User is already blocked');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'user_already_blocked',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         // Create block
         await BlockedUser.create({
-            user_id: currentUserId,
-            blocked_user_id: targetUserId
+            userId: currentUserId,
+            blockedUserId: targetUserId
         });
 
         return true;
@@ -139,15 +151,17 @@ class UserService {
     static async unblockUser(currentUserId, targetUserId) {
         const blockedUser = await BlockedUser.findOne({
             where: {
-                user_id: currentUserId,
-                blocked_user_id: targetUserId
+                userId: currentUserId,
+                blockedUserId: targetUserId
             }
         });
 
         if (!blockedUser) {
-            const error = new Error('User is not blocked');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'user_is_not_blocked',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
         }
 
         await blockedUser.destroy();
@@ -162,14 +176,14 @@ class UserService {
         const offset = (page - 1) * limit;
 
         const blockedUsers = await BlockedUser.findAndCountAll({
-            where: { user_id: currentUserId },
+            where: { userId: currentUserId },
             include: [{
                 model: User,
                 as: 'blockedUser',
             }],
             limit: parseInt(limit),
             offset: parseInt(offset),
-            order: [['created_at', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
 
         return {

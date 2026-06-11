@@ -1,6 +1,7 @@
 const { Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
-const { Op } = require('sequelize');
+const { Op, fn, col, where } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
+const AppError = require('../utils/AppError');
 
 class ConversationService {
     /**
@@ -9,8 +10,8 @@ class ConversationService {
     static async isParticipant(conversationId, userId) {
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
         return !!participation;
@@ -23,7 +24,7 @@ class ConversationService {
         const offset = (page - 1) * limit;
 
         const conversations = await ConversationParticipant.findAndCountAll({
-            where: { user_id: userId },
+            where: { userId: userId },
             include: [
                 {
                     model: Conversation,
@@ -44,7 +45,7 @@ class ConversationService {
                             model: Message,
                             as: 'messages',
                             limit: 1,
-                            order: [['created_at', 'DESC']],
+                            order: [['createdAt', 'DESC']],
                             include: [
                                 {
                                     model: User,
@@ -58,50 +59,47 @@ class ConversationService {
             ],
             limit: parseInt(limit),
             offset: parseInt(offset),
-            order: [['joined_at', 'DESC']]
+            order: [['joinedAt', 'DESC']]
         });
 
         // Format response with accurate unread count
         const formattedConversations = await Promise.all(conversations.rows.map(async participant => {
             const conversation = participant.conversation;
-            const otherParticipants = conversation.participants.filter(p => p.user_id !== userId);
+            const otherParticipants = conversation.participants.filter(p => p.userId !== userId);
 
-            let baselineTime = participant.joined_at;
-            if (participant.last_read_message_id) {
-                const lastReadMsg = await Message.findByPk(participant.last_read_message_id, { attributes: ['created_at'] });
-                if (lastReadMsg && lastReadMsg.created_at) {
-                    baselineTime = lastReadMsg.created_at;
+            let baselineTime = participant.joinedAt;
+            if (participant.lastReadMessageId) {
+                const lastReadMsg = await Message.findByPk(participant.lastReadMessageId, { attributes: ['createdAt'] });
+                if (lastReadMsg && lastReadMsg.createdAt) {
+                    baselineTime = lastReadMsg.createdAt;
                 }
             }
 
             const unreadCount = await Message.count({
                 where: {
-                    conversation_id: conversation.id,
-                    created_at: { [Op.gt]: baselineTime },
-                    sender_id: { [Op.ne]: userId }
+                    conversationId: conversation.id,
+                    createdAt: { [Op.gt]: baselineTime },
+                    senderId: { [Op.ne]: userId }
                 }
             });
 
             return {
-                id: conversation.id,
-                type: conversation.type,
-                name: conversation.name,
-                group_image: conversation.group_image,
+                ...conversation.toJSON(),
                 participants: otherParticipants.map(p => ({
                     ...p.user.toJSON(),
                     avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
                 })),
                 lastMessage: conversation.messages[0] || null,
-                joined_at: participant.joined_at,
-                last_read_message_id: participant.last_read_message_id,
+                joinedAt: participant.joinedAt,
+                lastReadMessageId: participant.lastReadMessageId,
                 unreadCount
             };
         }));
 
-        // Sort conversations by last message time (fallback: joined_at)
+        // Sort conversations by last message time (fallback: joinedAt)
         formattedConversations.sort((a, b) => {
-            const ta = a.lastMessage?.created_at || a.joined_at;
-            const tb = b.lastMessage?.created_at || b.joined_at;
+            const ta = a.lastMessage?.createdAt || a.joinedAt;
+            const tb = b.lastMessage?.createdAt || b.joinedAt;
             return new Date(tb) - new Date(ta);
         });
 
@@ -114,8 +112,61 @@ class ConversationService {
         };
     }
 
+    static async getPrivateConversationByParticipantsIds(userId, partnerId) {
+        if (!partnerId) {
+            if (!conversationId) {
+                throw new AppError({
+                    message: 'partnerid_required',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST'
+                });
+            }
+        }
+
+        const participantIds = [userId, partnerId];
+
+        const result = await ConversationParticipant.findOne({
+            attributes: ['conversationId'],
+            where: {
+                userId: {
+                    [Op.in]: participantIds,
+                }
+            },
+            include: [
+                {
+                    model: Conversation,
+                    as: 'conversation',
+                }
+
+            ],
+            group: [
+                'conversationId',
+                'conversation.id',
+                'conversation.type',
+                'conversation.name',
+                'conversation.groupImage'
+            ],
+            having: where(
+                fn('COUNT', col('conversationId')),
+                '=',
+                participantIds.length
+            )
+        });
+
+        return { conversation: result ? result.conversation : null };
+
+    }
+
     static async getConversationParticipants(userId, conversationId, isIncludeMe = true, baseUrl) {
         const userWhere = {};
+
+        if (!conversationId) {
+            throw new AppError({
+                message: 'conversationid_required',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
+        }
 
         if (!isIncludeMe) {
             userWhere.id = {
@@ -124,16 +175,16 @@ class ConversationService {
         }
 
         const participantRows = await ConversationParticipant.findAll({
-            where: { conversation_id: conversationId },
+            where: { conversationId: conversationId },
             include: [
                 {
                     model: User,
                     as: 'user',
                     where: userWhere,
-                    attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
                 }
             ]
         });
+
 
         return {
             participants: participantRows.map(p => ({
@@ -148,49 +199,67 @@ class ConversationService {
      * Create a new conversation
      */
     static async createConversation(userId, data, baseUrl) {
-        const { participantId, type = 'private', name, group_image } = data;
+        const { participantId, type = 'private', name, groupImage } = data;
 
         // For private conversations
         if (type === 'private') {
             if (!participantId) {
-                throw new Error('Participant ID is required for private conversations');
+                throw new AppError(
+                    {
+                        message: 'partnerid_required',
+                        code: 400,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                );
             }
 
             // Check if participant exists
             const participant = await User.findByPk(participantId);
             if (!participant) {
-                const error = new Error('Participant not found');
-                error.statusCode = 404;
-                throw error;
+                throw new AppError(
+                    {
+                        message: 'user_not_found',
+                        code: 404,
+                        statusCode: 'NOT_FOUND'
+                    }
+                );
             }
 
             // Block creating conversation if target account is private and it's not yourself
             if (participant.isPrivate && participant.id !== userId) {
-                const error = new Error('Cannot create conversation with private account');
-                error.statusCode = 403;
-                throw error;
+                throw new AppError(
+                    {
+                        message: 'create_conversation_private_user_failed',
+                        code: 403,
+                        statusCode: 'FORBIDDEN'
+                    }
+                );
             }
 
             // Check if users are blocked
             const isBlocked = await BlockedUser.findOne({
                 where: {
                     [Op.or]: [
-                        { user_id: userId, blocked_user_id: participantId },
-                        { user_id: participantId, blocked_user_id: userId }
+                        { userId: userId, blockedUserId: participantId },
+                        { userId: participantId, blockedUserId: userId }
                     ]
                 }
             });
 
             if (isBlocked) {
-                const error = new Error('Cannot create conversation with blocked user');
-                error.statusCode = 403;
-                throw error;
+                throw new AppError(
+                    {
+                        message: 'create_conversation_blocked_user_failed',
+                        code: 403,
+                        statusCode: 'FORBIDDEN'
+                    }
+                );
             }
 
             // Check if private conversation already exists
             const existingConversation = await ConversationParticipant.findAll({
                 where: {
-                    user_id: { [Op.in]: [userId, participantId] }
+                    userId: { [Op.in]: [userId, participantId] }
                 },
                 include: [
                     {
@@ -201,24 +270,24 @@ class ConversationService {
                 ]
             });
 
-            // Group by conversation_id and check if both users are in the same conversation
+            // Group by conversationId and check if both users are in the same conversation
             const conversationGroups = {};
             existingConversation.forEach(cp => {
-                if (!conversationGroups[cp.conversation_id]) {
-                    conversationGroups[cp.conversation_id] = [];
+                if (!conversationGroups[cp.conversationId]) {
+                    conversationGroups[cp.conversationId] = [];
                 }
-                conversationGroups[cp.conversation_id].push(cp.user_id);
+                conversationGroups[cp.conversationId].push(cp.userId);
             });
 
             for (const convId in conversationGroups) {
                 if (conversationGroups[convId].length === 2) {
-                    const conversation = existingConversation.find(cp => cp.conversation_id === convId).conversation;
+                    const conversation = existingConversation.find(cp => cp.conversationId === convId).conversation;
                     return {
                         message: 'Conversation already exists',
                         conversation: {
                             id: conversation.id,
                             type: conversation.type,
-                            created_at: conversation.created_at
+                            createdAt: conversation.createdAt
                         },
                         isExisting: true
                     };
@@ -230,7 +299,7 @@ class ConversationService {
         const conversation = await Conversation.create({
             type,
             name: type === 'group' ? name : null,
-            group_image: type === 'group' ? group_image : null
+            groupImage: type === 'group' ? groupImage : null
         });
 
         // Add participants
@@ -242,47 +311,37 @@ class ConversationService {
         await Promise.all(
             participants.map(uid =>
                 ConversationParticipant.create({
-                    conversation_id: conversation.id,
-                    user_id: uid
+                    conversationId: conversation.id,
+                    userId: uid
                 })
             )
         );
 
         // Get participant details for real-time event
         const participantRows = await ConversationParticipant.findAll({
-            where: { conversation_id: conversation.id },
+            where: { conversationId: conversation.id },
             include: [
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
                 }
             ]
         });
 
         const payload = {
             conversation: {
-                id: conversation.id,
-                type: conversation.type,
-                name: conversation.name,
-                group_image: conversation.group_image,
+                ...conversation.toJSON(),
                 participants: participantRows.map(p => ({
                     ...p.user.toJSON(),
                     avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
                 })),
-                created_at: conversation.created_at
+                createdAt: conversation.createdAt
             }
         };
 
         return {
-            message: 'Conversation created successfully',
-            conversation: {
-                id: conversation.id,
-                type: conversation.type,
-                name: conversation.name,
-                group_image: conversation.group_image,
-                created_at: conversation.created_at
-            },
+            message: 'create_conversation_success',
+            conversation: conversation.toJSON(),
             isExisting: false,
             participants: participants, // List of user IDs
             payload: payload // Full payload for socket
@@ -296,15 +355,17 @@ class ConversationService {
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
 
         if (!participation) {
-            const error = new Error('Access denied');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError({
+                message: 'access_denied',
+                code: 403,
+                statusCode: 'FORBIDDEN',
+            });
         }
 
         const userWhere = {};
@@ -324,7 +385,6 @@ class ConversationService {
                             model: User,
                             as: 'user',
                             where: userWhere,
-                            attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
                         }
                     ]
                 }
@@ -332,18 +392,14 @@ class ConversationService {
         });
 
         if (!conversation) {
-            const error = new Error('Conversation not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'conversation_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND',
+            });
         }
 
-        let result = {
-            id: conversation.id,
-            type: conversation.type,
-            name: conversation.name,
-            group_image: conversation.group_image,
-            created_at: conversation.created_at
-        };
+        let result = conversation.toJSON();
 
         if (isShowParticipants && conversation.participants) {
             result.participants = conversation.participants.map(p => ({
@@ -359,48 +415,49 @@ class ConversationService {
      * Update conversation (group)
      */
     static async updateConversation(conversationId, userId, data) {
-        const { name, group_image } = data;
+        const { name, groupImage } = data;
 
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
 
         if (!participation) {
-            const error = new Error('Access denied');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError({
+                message: 'access_denied',
+                code: 403,
+                statusCode: 'FORBIDDEN',
+            });
         }
 
         const conversation = await Conversation.findByPk(conversationId);
 
         if (!conversation) {
-            const error = new Error('Conversation not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                message: 'conversation_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND',
+            });
         }
 
         if (conversation.type !== 'group') {
-            const error = new Error('Can only update group conversations');
-            error.statusCode = 400;
-            throw error;
+            throw new AppError({
+                message: 'can_only_update_group_conversations',
+                code: 400,
+                statusCode: 'BAD_REQUEST',
+            });
         }
 
         // Update conversation
         await conversation.update({
             name: name || conversation.name,
-            group_image: group_image !== undefined ? group_image : conversation.group_image
+            groupImage: groupImage !== undefined ? groupImage : conversation.groupImage
         });
 
-        return {
-            id: conversation.id,
-            type: conversation.type,
-            name: conversation.name,
-            group_image: conversation.group_image
-        };
+        return conversation;
     }
 
     /**
@@ -409,22 +466,24 @@ class ConversationService {
     static async leaveConversation(conversationId, userId) {
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
 
         if (!participation) {
-            const error = new Error('You are not a participant in this conversation');
-            error.statusCode = 404; // Or 403, keeping consistent with old code which was 404
-            throw error;
+            throw new AppError({
+                message: 'you_are_not_a_participant',
+                code: 404,
+                statusCode: 'NOT_FOUND',
+            });
         }
 
         await participation.destroy();
 
         // Check if conversation has no participants left
         const remainingParticipants = await ConversationParticipant.count({
-            where: { conversation_id: conversationId }
+            where: { conversationId: conversationId }
         });
 
         if (remainingParticipants === 0) {

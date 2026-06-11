@@ -6,35 +6,36 @@ class MessageService {
     /**
      * Get messages for a conversation
      */
-    static async getMessages(conversationId, userId, baseUrl, page = 1, limit = 50) {
+    static async getMessages(conversationId, currentUserId, baseUrl, page = 1, limit = 50) {
         const offset = (page - 1) * limit;
 
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: currentUserId
             }
         });
 
         if (!participation) {
-            const error = new Error('Access denied');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError({
+                code: 403,
+                statusCode: 'FORBIDDEN',
+                message: 'access_denied'
+            });
         }
 
         const messages = await Message.findAndCountAll({
-            where: { conversation_id: conversationId },
+            where: { conversationId: conversationId },
             include: [
                 {
                     model: User,
                     as: 'sender',
-                    attributes: ['id', 'username', 'name', 'avatarUrl']
                 }
             ],
             limit: parseInt(limit),
             offset: parseInt(offset),
-            order: [['created_at', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
 
         return {
@@ -42,11 +43,12 @@ class MessageService {
                 const json = m.toJSON();
                 return {
                     ...json,
-                    content: json.type !== 'text' ? buildAvatarUrl(json.content, baseUrl) : json.content,
+                    content: json.type == 'text' ? json.content : buildAvatarUrl(json.content, baseUrl),
                     sender: {
                         ...m.sender.toJSON(),
                         avatarUrl: buildAvatarUrl(m.sender.avatarUrl, baseUrl),
-                    }
+                    },
+                    isSendByMe: m.senderId == currentUserId,
                 };
             }),
             total: messages.count,
@@ -65,21 +67,25 @@ class MessageService {
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
 
         if (!participation) {
-            const error = new Error('Access denied');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError(
+                {
+                    'code': 403,
+                    'statusCode': 'FORBIDDEN',
+                    'message': 'access_denied'
+                }
+            );
         }
 
         // Create message
         const message = await Message.create({
-            conversation_id: conversationId,
-            sender_id: userId,
+            conversationId: conversationId,
+            senderId: userId,
             content,
             type
         });
@@ -90,7 +96,6 @@ class MessageService {
                 {
                     model: User,
                     as: 'sender',
-                    attributes: ['id', 'username', 'name', 'avatarUrl']
                 }
             ]
         });
@@ -106,13 +111,13 @@ class MessageService {
 
         // Ensure sender doesn't get unread count for their own message
         await ConversationParticipant.update(
-            { last_read_message_id: message.id },
-            { where: { conversation_id: conversationId, user_id: userId } }
+            { lastReadMessageId: message.id },
+            { where: { conversationId: conversationId, userId: userId } }
         );
 
         // Get participants for notification/socket
         const participants = await ConversationParticipant.findAll({
-            where: { conversation_id: conversationId }
+            where: { conversationId: conversationId }
         });
 
         return {
@@ -129,16 +134,20 @@ class MessageService {
         const message = await Message.findByPk(messageId);
 
         if (!message) {
-            const error = new Error('Message not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                code: 404,
+                statusCode: 'NOT_FOUND',
+                message: 'message_not_found',
+            });
         }
 
         // Check if user is the sender
-        if (message.sender_id !== userId) {
-            const error = new Error('Can only edit your own messages');
-            error.statusCode = 403;
-            throw error;
+        if (message.senderId !== userId) {
+            throw new AppError({
+                code: 403,
+                statusCode: 'FORBIDDEN',
+                message: 'can_only_edit_your_own_messages',
+            });
         }
 
         // Update message
@@ -165,19 +174,23 @@ class MessageService {
         const message = await Message.findByPk(messageId);
 
         if (!message) {
-            const error = new Error('Message not found');
-            error.statusCode = 404;
-            throw error;
+            throw new AppError({
+                code: 404,
+                statusCode: 'NOT_FOUND',
+                message: 'message_not_found',
+            });
         }
 
         // Check if user is the sender
-        if (message.sender_id !== userId) {
-            const error = new Error('Can only delete your own messages');
-            error.statusCode = 403;
-            throw error;
+        if (message.senderId !== userId) {
+            throw new AppError({
+                code: 403,
+                statusCode: 'FORBIDDEN',
+                message: 'can_only_delete_your_own_messages',
+            });
         }
 
-        const conversationId = message.conversation_id;
+        const conversationId = message.conversationId;
         await message.destroy();
 
         return conversationId;
@@ -190,40 +203,42 @@ class MessageService {
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
-                conversation_id: conversationId,
-                user_id: userId
+                conversationId: conversationId,
+                userId: userId
             }
         });
 
         if (!participation) {
-            const error = new Error('Access denied');
-            error.statusCode = 403;
-            throw error;
+            throw new AppError({
+                code: 403,
+                statusCode: 'FORBIDDEN',
+                message: 'access_denied'
+            });
         }
 
         // Update last read message
         await participation.update({
-            last_read_message_id: messageId
+            lastReadMessageId: messageId
         });
 
         // After updating this user's read state, check if all participants have read up to some point
         const participants = await ConversationParticipant.findAll({
-            where: { conversation_id: conversationId }
+            where: { conversationId: conversationId }
         });
 
-        // If every participant has a non-null last_read_message_id, mark messages that everyone has read as is_read=true
+        // If every participant has a non-null lastReadMessageId, mark messages that everyone has read as isRead=true
         const lastReadTimes = [];
         for (const p of participants) {
-            if (!p.last_read_message_id) {
+            if (!p.lastReadMessageId) {
                 lastReadTimes.length = 0;
                 break;
             }
-            const lastReadMsg = await Message.findByPk(p.last_read_message_id, { attributes: ['created_at'] });
-            if (!lastReadMsg || !lastReadMsg.created_at) {
+            const lastReadMsg = await Message.findByPk(p.lastReadMessageId, { attributes: ['createdAt'] });
+            if (!lastReadMsg || !lastReadMsg.createdAt) {
                 lastReadTimes.length = 0;
                 break;
             }
-            lastReadTimes.push(lastReadMsg.created_at);
+            lastReadTimes.push(lastReadMsg.createdAt);
         }
 
         let updatedMessageIds = [];
@@ -234,20 +249,20 @@ class MessageService {
             const toUpdate = await Message.findAll({
                 attributes: ['id'],
                 where: {
-                    conversation_id: conversationId,
-                    is_read: false,
-                    created_at: { [Op.lte]: thresholdDate }
+                    conversationId: conversationId,
+                    isRead: false,
+                    createdAt: { [Op.lte]: thresholdDate }
                 }
             });
 
             if (toUpdate.length > 0) {
                 await Message.update(
-                    { is_read: true },
+                    { isRead: true },
                     {
                         where: {
-                            conversation_id: conversationId,
-                            is_read: false,
-                            created_at: { [Op.lte]: thresholdDate }
+                            conversationId: conversationId,
+                            isRead: false,
+                            createdAt: { [Op.lte]: thresholdDate }
                         }
                     }
                 );

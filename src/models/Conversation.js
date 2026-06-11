@@ -19,7 +19,7 @@ const Conversation = sequelize.define('Conversation', {
             len: [1, 100]
         }
     },
-    group_image: {
+    groupImage: {
         type: DataTypes.TEXT,
         allowNull: true,
         validate: {

@@ -1,5 +1,7 @@
 const { validationResult } = require('express-validator');
 const ConversationService = require('../services/conversationService');
+const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/AppError');
 
 class ConversationController {
     // Get all conversations for current user
@@ -7,27 +9,36 @@ class ConversationController {
         try {
             const { page = 1, limit = 20 } = req.query;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
 
             const result = await ConversationService.getConversations(
-                req.user.userId,
+                currentUserId,
                 baseUrl,
                 page,
                 limit
             );
 
-            res.json({
-                conversations: result.conversations,
-                pagination: {
-                    page: result.page,
-                    limit: result.limit,
-                    total: result.total,
-                    totalPages: result.totalPages
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    conversations: result.conversations,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
                 }
             });
         } catch (error) {
-            console.error('Get conversations error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - getConversations() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -37,16 +48,19 @@ class ConversationController {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
+                throw new AppError({
+                    message: 'validation_failed',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    errors: error.array()
                 });
             }
 
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
 
             const result = await ConversationService.createConversation(
-                req.user.userId,
+                currentUserId,
                 req.body,
                 baseUrl
             );
@@ -58,24 +72,29 @@ class ConversationController {
                 });
             }
 
-            // If existing, we return 200 (default res.json is 200). If new, we might want 201.
-            // The original code returned 200 for existing and 201 for new.
             if (result.isExisting) {
-                return res.json({
+                return ApiResponse.success(res, {
+                    code: 200,
+                    statusCode: 'OK',
                     message: result.message,
-                    conversation: result.conversation
+                    data: result.conversation,
                 });
             } else {
-                return res.status(201).json({
+                return ApiResponse.success(res, {
+                    code: 201,
+                    statusCode: 'CREATED',
                     message: result.message,
-                    conversation: result.conversation
+                    data: result.conversation,
                 });
             }
 
         } catch (error) {
-            console.error('Create conversation error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - createConversation() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -85,20 +104,64 @@ class ConversationController {
         try {
             const { conversationId, isShowParticipants = true, isParticipantsIncludeMe = true } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
 
             const conversation = await ConversationService.getConversationById(
                 conversationId,
-                req.user.userId,
+                currentUserId,
                 isShowParticipants,
                 isParticipantsIncludeMe,
                 baseUrl
             );
 
-            res.json({ conversation });
+            ApiResponse.success(res, {
+                message: 'data_retrieved',
+                code: 200,
+                statusCode: 'OK',
+                data: conversation,
+            });
         } catch (error) {
-            console.error('Get conversation error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - getConversationById() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
+        }
+    }
+
+    static async getPrivateConversationByParticipantsIds(req, res) {
+        try {
+            const { partnerId } = req.body;
+            const currentUserId = req.user.userId;
+
+            if (!partnerId) {
+                throw new AppError(
+                    {
+                        message: 'partnerid_required',
+                        code: 400,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                );
+            }
+
+            const result = await ConversationService.getPrivateConversationByParticipantsIds(currentUserId, partnerId);
+
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                messasge: 'data_retrieved',
+                data: result.conversation,
+            });
+
+        } catch (error) {
+            console.error('ConversationController - getPrivateConversationByParticipantsIds() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -107,26 +170,29 @@ class ConversationController {
         try {
             const { conversationId, isIncludeMe = true } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
-
-            console.log("getConversationParticipants isincludeme type", typeof isIncludeMe, isIncludeMe);
-
+            const currentUserId = req.user.userId;
 
             const result = await ConversationService.getConversationParticipants(
-                req.user.userId,
+                currentUserId,
                 conversationId,
                 isIncludeMe,
                 baseUrl
             );
 
-            console.log("getConversationParticipants Result:", result);
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: result.participants,
 
-            res.json({
-                participants: result.participants,
             });
         } catch (error) {
-            console.error('Get conversation participants error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - getConversationParticipants() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -136,28 +202,36 @@ class ConversationController {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
+                throw new AppError({
+                    message: 'validation_failed',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    errors: errors.array(),
                 });
             }
 
             const { conversationId } = req.body;
+            const currentUserId = req.user.userId;
 
             const conversation = await ConversationService.updateConversation(
                 conversationId,
-                req.user.userId,
+                currentUserId,
                 req.body
             );
 
-            res.json({
-                message: 'Conversation updated successfully',
-                conversation
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'conversation_update_success',
+                data: conversation,
             });
         } catch (error) {
-            console.error('Update conversation error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - updateConversation() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -166,16 +240,22 @@ class ConversationController {
     static async leaveConversation(req, res) {
         try {
             const { conversationId } = req.params;
+            const currentUserId = req.user.userId;
 
-            await ConversationService.leaveConversation(conversationId, req.user.userId);
+            await ConversationService.leaveConversation(conversationId, currentUserId);
 
-            res.json({
-                message: 'Left conversation successfully'
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'left_conversation_success',
             });
         } catch (error) {
-            console.error('Leave conversation error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('ConversationController - leaveConversation() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }

@@ -1,5 +1,7 @@
 const { validationResult } = require('express-validator');
 const UserService = require('../services/userService');
+const ApiResponse = require('../utils/apiResponse');
+const AppError = require('../utils/AppError');
 
 class UserController {
     // Search users
@@ -16,19 +18,27 @@ class UserController {
                 limit
             );
 
-            res.json({
-                users: result.users,
-                pagination: {
-                    page: result.page,
-                    limit: result.limit,
-                    total: result.total,
-                    totalPages: result.totalPages
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    users: result.users,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
                 }
             });
         } catch (error) {
-            console.error('Search users error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('UserController - searchUsers() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -45,11 +55,19 @@ class UserController {
                 baseUrl
             );
 
-            res.json({ user });
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: user
+            });
         } catch (error) {
-            console.error('Get user error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('UserController - getUserById() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -59,9 +77,11 @@ class UserController {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: errors.array()
+                throw new AppError({
+                    message: 'validation_failed',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    errors: errors.array()
                 });
             }
 
@@ -69,13 +89,18 @@ class UserController {
 
             await UserService.blockUser(req.user.userId, userId);
 
-            res.json({
-                message: 'User blocked successfully'
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'user_blocked_successfully'
             });
         } catch (error) {
-            console.error('Block user error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('UserController - blockUser() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -87,13 +112,18 @@ class UserController {
 
             await UserService.unblockUser(req.user.userId, userId);
 
-            res.json({
-                message: 'User unblocked successfully'
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'user_unblocked_successfully'
             });
         } catch (error) {
-            console.error('Unblock user error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            console.error('UserController - unblockUser() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }
@@ -111,19 +141,27 @@ class UserController {
                 limit
             );
 
-            res.json({
-                blockedUsers: result.blockedUsers,
-                pagination: {
-                    page: result.page,
-                    limit: result.limit,
-                    total: result.total,
-                    totalPages: result.totalPages
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    blockedUsers: result.blockedUsers,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
                 }
             });
         } catch (error) {
             console.error('Get blocked users error:', error);
-            res.status(error.statusCode || 500).json({
-                error: error.message || 'Internal server error'
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
             });
         }
     }

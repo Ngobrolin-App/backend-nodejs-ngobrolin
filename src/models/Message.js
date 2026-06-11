@@ -7,7 +7,7 @@ const Message = sequelize.define('Message', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
     },
-    conversation_id: {
+    conversationId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -15,7 +15,7 @@ const Message = sequelize.define('Message', {
             key: 'id'
         }
     },
-    sender_id: {
+    senderId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -37,7 +37,7 @@ const Message = sequelize.define('Message', {
             isIn: [['text', 'image', 'file', 'audio', 'video']]
         }
     },
-    is_read: {
+    isRead: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     }
