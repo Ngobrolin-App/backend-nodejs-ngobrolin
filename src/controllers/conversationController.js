@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const ConversationService = require('../services/conversationService');
 const ApiResponse = require('../utils/apiResponse');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 
 class ConversationController {
     // Get all conversations for current user

@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const NotificationService = require('../services/notificationService');
 const ApiResponse = require('../utils/apiResponse');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 class NotificationController {
     // Register FCM token
     static async registerToken(req, res) {

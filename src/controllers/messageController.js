@@ -2,7 +2,7 @@ const { validationResult } = require('express-validator');
 const MessageService = require('../services/messageService');
 const NotificationService = require('../services/notificationService');
 const ApiResponse = require('../utils/apiResponse');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 
 class MessageController {
     // Get messages for a conversation

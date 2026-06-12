@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const AuthService = require('../services/authService');
 const ApiResponse = require('../utils/apiResponse');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 
 class AuthController {
     // Register new user

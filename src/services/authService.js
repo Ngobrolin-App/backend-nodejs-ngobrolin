@@ -2,7 +2,7 @@ const { User, sequelize } = require('../models');
 const { hashPassword, comparePassword, generateToken, verifyToken } = require('../utils/auth');
 const { buildAvatarUrl } = require('../utils/urlHelper');
 const { sendEmail } = require('../utils/email');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 

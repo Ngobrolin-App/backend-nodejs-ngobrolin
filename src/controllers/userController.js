@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const UserService = require('../services/userService');
 const ApiResponse = require('../utils/apiResponse');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 
 class UserController {
     // Search users

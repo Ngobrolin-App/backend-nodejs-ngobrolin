@@ -1,7 +1,7 @@
 const { Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
 const { Op, fn, col, where } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
-const AppError = require('../utils/AppError');
+const AppError = require('../utils/appError');
 
 class ConversationService {
     /**
