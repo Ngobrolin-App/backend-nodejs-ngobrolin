@@ -161,9 +161,3 @@ const socketHandlers = (socket, io) => {
 };
 
 module.exports = socketHandlers;
-// module.exports = (io) => {
-//     io.on('connection', (socket) => {
-//         console.log('User connected:', socket.id);
-//         socketHandlers(socket, io);
-//     });
-// };

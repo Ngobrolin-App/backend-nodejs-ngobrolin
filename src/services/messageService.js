@@ -1,6 +1,7 @@
 const { Message, Conversation, ConversationParticipant, User, FCMToken } = require('../models');
 const { Op } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
+const AppError = require('../utils/AppError');
 
 class MessageService {
     /**

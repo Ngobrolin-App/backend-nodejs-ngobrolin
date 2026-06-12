@@ -85,8 +85,6 @@ class AuthController {
         try {
             const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-            console.log('AuthController - Get profile for userId:', req.user.userId);
-
             const result = await AuthService.getProfile(req.user.userId, baseUrl);
 
             ApiResponse.success(res, {
