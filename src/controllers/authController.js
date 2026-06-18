@@ -25,7 +25,7 @@ class AuthController {
             ApiResponse.success(res, {
                 code: 200,
                 status: 'OK',
-                message: 'register_success',
+                message: 'registration_success',
                 data: {
                     user: result.user,
                     token: result.token

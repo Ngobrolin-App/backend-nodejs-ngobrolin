@@ -22,6 +22,7 @@ const socketHandlers = (socket, io) => {
         } catch (error) {
             console.error('Socket authentication error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
+            socket.disconnect();
         }
     });
 
@@ -66,26 +67,6 @@ const socketHandlers = (socket, io) => {
             socket.emit('error', { message: 'Failed to leave conversation' });
         }
     });
-
-    // Kirim echo realtime ke room conversation_{id} dengan event new_message
-    // DEPRECATED: Use HTTP POST /api/messages/send instead to ensure DB persistence and single source of truth.
-    // socket.on('send_message', async (data) => {
-    //     try {
-    //         const { conversationId, content, type } = data;
-    //         io.to(`conversation_${conversationId}`).emit('new_message', {
-    //             message: {
-    //                 id: `${Date.now()}`, // id sementara; id final datang dari HTTP API
-    //                 conversation_id: conversationId,
-    //                 sender_id: socket.userId,
-    //                 content,
-    //                 type: type || 'text',
-    //                 created_at: new Date().toISOString(),
-    //             },
-    //         });
-    //     } catch (error) {
-    //         console.error('Socket send_message error:', error);
-    //     }
-    // });
 
     // Handle typing indicators
     socket.on('typing_start', (data) => {
