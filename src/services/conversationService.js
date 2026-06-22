@@ -37,7 +37,6 @@ class ConversationService {
                                 {
                                     model: User,
                                     as: 'user',
-                                    attributes: ['id', 'username', 'name', 'avatarUrl', 'isPrivate']
                                 }
                             ]
                         },
@@ -50,7 +49,6 @@ class ConversationService {
                                 {
                                     model: User,
                                     as: 'sender',
-                                    attributes: ['id', 'username', 'name']
                                 }
                             ]
                         }
@@ -66,6 +64,11 @@ class ConversationService {
         const formattedConversations = await Promise.all(conversations.rows.map(async participant => {
             const conversation = participant.conversation;
             const otherParticipants = conversation.participants.filter(p => p.userId !== userId);
+            let privatePartnerUser = null;
+            if (conversation.type == 'private') {
+                // Gunakan akses indeks [0] dan pastikan aman
+                privatePartnerUser = otherParticipants[0]?.user;
+            }
 
             let baselineTime = participant.joinedAt;
             if (participant.lastReadMessageId) {
@@ -85,13 +88,16 @@ class ConversationService {
 
             return {
                 ...conversation.toJSON(),
+                privatePartnerUser: {
+                    ...privatePartnerUser.toJSON(),
+                    avatarUrl: buildAvatarUrl(privatePartnerUser.avatarUrl, baseUrl),
+                },
                 participants: otherParticipants.map(p => ({
                     ...p.user.toJSON(),
                     avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
                 })),
                 lastMessage: conversation.messages[0] || null,
                 joinedAt: participant.joinedAt,
-                lastReadMessageId: participant.lastReadMessageId,
                 unreadCount
             };
         }));

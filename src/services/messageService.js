@@ -128,6 +128,35 @@ class MessageService {
         };
     }
 
+    static async getUnreadCount(conversationId, userId) {
+        const participant = await ConversationParticipant.findOne({
+            where: { conversationId, userId }
+        });
+
+        if (!participant) return 0;
+
+        let baselineTime = participant.joinedAt;
+
+        if (participant.lastReadMessageId) {
+            const lastReadMsg = await Message.findByPk(participant.lastReadMessageId, {
+                attributes: ['createdAt']
+            });
+            if (lastReadMsg) {
+                baselineTime = lastReadMsg.createdAt;
+            }
+        }
+
+        const unreadCount = await Message.count({
+            where: {
+                conversationId,
+                senderId: { [Op.ne]: userId },
+                createdAt: { [Op.gt]: baselineTime }
+            }
+        });
+
+        return unreadCount;
+    }
+
     /**
      * Update message
      */

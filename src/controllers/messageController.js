@@ -77,21 +77,17 @@ class MessageController {
                     message: message
                 });
 
-                // Also emit conversation update to participants' personal rooms so chat list stays in sync
-                const payload = {
-                    conversationId,
-                    lastMessage: {
-                        id: message.id,
-                        content: message.content,
-                        createdAt: message.createdAt,
-                        senderId: message.senderId,
-                        type: message.type,
-                    }
-                };
-
-                participants.forEach(p => {
+                for (const p of participants) {
+                    const unreadCount = await MessageService.getUnreadCount(conversationId, p.userId);
+                    const payload = {
+                        conversationId,
+                        unreadCount,
+                        lastMessage: message,
+                    };
+                    // GET UNREAD MESSAGE (USERID DAN CONVERSATION ID)
+                    // PAYLOAD AKAN DITAMBAHKAN UNREAD COUNT
                     req.io.to(`user_${p.userId}`).emit('conversation_updated', payload);
-                });
+                }
 
                 // Send push notification
                 await NotificationService.sendNewMessageNotification(
@@ -241,12 +237,6 @@ class MessageController {
                         messageIds: result.updatedMessageIds
                     });
                 }
-
-                req.io.to(`conversation_${conversationId}`).emit('messages_read', {
-                    userId: req.user.userId,
-                    messageId: messageId
-                });
-
                 // Emit to user's personal room to update ChatList (unread count -> 0)
                 req.io.to(`user_${req.user.userId}`).emit('conversation_read_by_me', {
                     conversationId,
