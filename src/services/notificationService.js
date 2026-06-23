@@ -2,12 +2,11 @@ const { FCMToken } = require('../models');
 const { Op } = require('sequelize');
 const { admin } = require('../config/firebase');
 const { buildAvatarUrl } = require('../utils/urlHelper');
-
 class NotificationService {
     /**
      * Send push notification for new message
      */
-    static async sendNewMessageNotification(participants, senderId, messageRaw, conversationId, baseUrl) {
+    static async sendNewMessageNotification(participants, senderId, messageRaw, conversationId, baseUrl, screen) {
         try {
             const recipientIds = participants.map(p => p.userId).filter(id => id !== senderId);
             if (recipientIds.length === 0) return;
@@ -35,7 +34,8 @@ class NotificationService {
                     userId: String(messageRaw.senderId || ''),
                     name: String((messageRaw.sender.name || messageRaw.sender.username || '')),
                     avatarUrl: String(buildAvatarUrl(messageRaw.sender.avatarUrl, baseUrl) || ''),
-                    conversationId: String(conversationId || '')
+                    conversationId: String(conversationId || ''),
+                    screen: screen,
                 }
             });
 

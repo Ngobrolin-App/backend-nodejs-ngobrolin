@@ -245,7 +245,7 @@ class AuthService {
         // Create reset URL
         // In a real app, this might be a deep link like ngobrolin://reset-password?token=...
         // For now, we'll use an environment variable or generic fallback
-        const frontendUrl = process.env.FRONTEND_RESET_URL || 'ngobrolin://reset-password';
+        const frontendUrl = process.env.FRONTEND_RESET_URL || 'ngobrolin://app/reset-password';
         const resetUrl = `${frontendUrl}?token=${resetToken}`;
 
         // Send email
@@ -256,6 +256,7 @@ class AuthService {
             <p>If you did not request this, please ignore this email.</p>
             <p>This link will expire in 1 hour.</p>
         `;
+        // console.log('AuthService - forgotPassword - resetUrl:', resetUrl);
 
         // Send email asynchronously so we don't block the frontend response
         try {

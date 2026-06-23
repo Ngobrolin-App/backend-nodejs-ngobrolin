@@ -18,7 +18,7 @@ const socketHandlers = (socket, io) => {
                 userId: socket.userId
             });
 
-            console.log(`User ${socket.username || socket.userId} authenticated via socket`);
+            // console.log(`User ${socket.username || socket.userId} authenticated via socket`);
         } catch (error) {
             console.error('Socket authentication error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
@@ -47,7 +47,7 @@ const socketHandlers = (socket, io) => {
             socket.join(`conversation_${conversationId}`);
             socket.emit('joined_conversation', { conversationId });
 
-            console.log(`User ${socket.username} joined conversation ${conversationId}`);
+            // console.log(`User ${socket.username} joined conversation ${conversationId}`);
         } catch (error) {
             console.error('Join conversation error:', error);
             socket.emit('error', { message: 'Failed to join conversation' });
@@ -61,7 +61,7 @@ const socketHandlers = (socket, io) => {
             socket.leave(`conversation_${conversationId}`);
             socket.emit('left_conversation', { conversationId });
 
-            console.log(`User ${socket.username} left conversation ${conversationId}`);
+            // console.log(`User ${socket.username} left conversation ${conversationId}`);
         } catch (error) {
             console.error('Leave conversation error:', error);
             socket.emit('error', { message: 'Failed to leave conversation' });
@@ -121,7 +121,7 @@ const socketHandlers = (socket, io) => {
     socket.on('disconnect', () => {
         try {
             if (socket.userId) {
-                console.log(`User ${socket.username} disconnected`);
+                // console.log(`User ${socket.username} disconnected`);
 
                 // Broadcast offline status
                 socket.broadcast.emit('user_status_changed', {

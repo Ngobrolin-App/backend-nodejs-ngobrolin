@@ -3,6 +3,7 @@ const MessageService = require('../services/messageService');
 const NotificationService = require('../services/notificationService');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
+const { DeeplinkScreens } = require('../constants/deeplink_constants');
 
 class MessageController {
     // Get messages for a conversation
@@ -95,7 +96,8 @@ class MessageController {
                     req.user.userId,
                     messageRaw,
                     conversationId,
-                    baseUrl
+                    baseUrl,
+                    DeeplinkScreens.CHAT,
                 );
             }
 
