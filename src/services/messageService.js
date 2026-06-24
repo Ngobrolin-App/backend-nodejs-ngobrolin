@@ -40,7 +40,7 @@ class MessageService {
         });
 
         return {
-            messages: messages.rows.reverse().map(m => {
+            messages: messages.rows.map(m => {
                 const json = m.toJSON();
                 return {
                     ...json,
