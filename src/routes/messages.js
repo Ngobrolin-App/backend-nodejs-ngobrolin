@@ -38,7 +38,11 @@ const sendMessageValidation = [
     body('type')
         .optional()
         .isIn(['text', 'image', 'file', 'audio', 'video'])
-        .withMessage('Message type must be one of: text, image, file, audio, video')
+        .withMessage('Message type must be one of: text, image, file, audio, video'),
+    body('repliedMessageId')
+        .optional()
+        .isUUID()
+        .withMessage('Replied Message ID must be a valid UUID'),
 ];
 
 const updateMessageValidation = [

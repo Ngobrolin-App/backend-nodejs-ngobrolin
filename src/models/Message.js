@@ -40,7 +40,15 @@ const Message = sequelize.define('Message', {
     isRead: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
-    }
+    },
+    repliedMessageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'tblmessages',
+            key: 'id'
+        }
+    },
 }, {
     tableName: 'tblmessages',
     updatedAt: false,

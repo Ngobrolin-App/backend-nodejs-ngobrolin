@@ -32,6 +32,16 @@ class MessageService {
                 {
                     model: User,
                     as: 'sender',
+                },
+                {
+                    model: Message,
+                    as: 'repliedMessage',
+                    include: [
+                        {
+                            model: User,
+                            as: 'sender',
+                        }
+                    ]
                 }
             ],
             limit: parseInt(limit),
@@ -49,6 +59,10 @@ class MessageService {
                         ...m.sender.toJSON(),
                         avatarUrl: buildAvatarUrl(m.sender.avatarUrl, baseUrl),
                     },
+                    repliedMessage: m.repliedMessage != null ? {
+                        ...m.repliedMessage.toJSON(),
+                        content: m.repliedMessage.type == 'text' ? m.repliedMessage.content : buildAvatarUrl(m.repliedMessage.content, baseUrl),
+                    } : null,
                     isSendByMe: m.senderId == currentUserId,
                 };
             }),
@@ -63,7 +77,7 @@ class MessageService {
      * Send a message
      */
     static async sendMessage(userId, data, baseUrl) {
-        const { conversationId, content, type = 'text' } = data;
+        const { conversationId, content, type = 'text', repliedMessageId } = data;
 
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
@@ -88,7 +102,8 @@ class MessageService {
             conversationId: conversationId,
             senderId: userId,
             content,
-            type
+            type,
+            repliedMessageId,
         });
 
         // Get message with sender info
@@ -97,6 +112,16 @@ class MessageService {
                 {
                     model: User,
                     as: 'sender',
+                },
+                {
+                    model: Message,
+                    as: 'repliedMessage',
+                    include: [
+                        {
+                            model: User,
+                            as: 'sender',
+                        }
+                    ]
                 }
             ]
         });
@@ -107,7 +132,12 @@ class MessageService {
             sender: {
                 ...messageWithSender.sender.toJSON(),
                 avatarUrl: buildAvatarUrl(messageWithSender.sender.avatarUrl, baseUrl),
-            }
+            },
+            repliedMessage: messageWithSender.repliedMessage
+                ? {
+                    ...messageWithSender.repliedMessage.toJSON(),
+                    content: messageWithSender.repliedMessage.type == 'text' ? messageWithSender.repliedMessage.content : buildAvatarUrl(messageWithSender.repliedMessage.content, baseUrl),
+                } : null,
         };
 
         // Ensure sender doesn't get unread count for their own message
@@ -121,11 +151,13 @@ class MessageService {
             where: { conversationId: conversationId }
         });
 
-        return {
+        const result = {
             message: msgOut,
             participants,
             messageRaw: messageWithSender // For FCM title/body construction if needed
-        };
+        }
+
+        return result;
     }
 
     static async getUnreadCount(conversationId, userId) {
