@@ -5,12 +5,12 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.addColumn('tblmessages', 'replied_message_id', {
       type: Sequelize.UUID,
-      allowNull: true, // Karena tidak semua pesan adalah balasan
+      allowNull: true,
       references: {
-        model: 'tblmessages', // Referensi ke tabel itu sendiri (Self-referencing)
+        model: 'tblmessages',
         key: 'id'
       },
-      onDelete: 'SET NULL', // Jika pesan asli dihapus, kolom ini jadi NULL
+      onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
 
