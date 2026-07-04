@@ -25,10 +25,7 @@ const Message = sequelize.define('Message', {
     },
     content: {
         type: DataTypes.TEXT,
-        allowNull: false,
-        validate: {
-            notEmpty: true
-        }
+        allowNull: true,
     },
     type: {
         type: DataTypes.STRING(20),
@@ -49,6 +46,38 @@ const Message = sequelize.define('Message', {
             key: 'id'
         }
     },
+    mediaUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    mediaFileType: {
+        type: DataTypes.STRING(50),
+        allowNull: true
+    },
+    mediaSize: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    forwardedFromMessageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'tblmessages',
+            key: 'id'
+        }
+    },
+    isForwarded: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    forwardedCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
+    mediaFileName: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    }
 }, {
     tableName: 'tblmessages',
     updatedAt: false,
@@ -61,7 +90,10 @@ const Message = sequelize.define('Message', {
         },
         {
             fields: ['created_at']
-        }
+        },
+        {
+            fields: ['forwarded_from_message_id']
+        },
     ]
 });
 

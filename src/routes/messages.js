@@ -30,8 +30,7 @@ const sendMessageValidation = [
         .isUUID()
         .withMessage('Conversation ID must be a valid UUID'),
     body('content')
-        .notEmpty()
-        .withMessage('Message content is required')
+        .optional()
         .isLength({ min: 1, max: 5000 })
         .withMessage('Message content must be between 1 and 5000 characters')
         .trim(),
@@ -43,6 +42,31 @@ const sendMessageValidation = [
         .optional()
         .isUUID()
         .withMessage('Replied Message ID must be a valid UUID'),
+    body('mediaUrl')
+        .optional()
+        .isString()
+        .withMessage('Media URL must be a string'),
+    body('mediaFileType')
+        .optional()
+        .isString()
+        .withMessage('Media file type must be a string'),
+    body('mediaSize')
+        .optional()
+        .isInt({ min: 0 })
+        .withMessage('Media size must be a positive integer'),
+    body('mediaFileName')
+        .optional()
+        .isString()
+        .withMessage('Media file name must be a string')
+        .trim(),
+    body('forwardedFromMessageId')
+        .optional()
+        .isUUID()
+        .withMessage('Forwarded From Message ID must be a valid UUID'),
+    body('isForwarded')
+        .optional()
+        .isBoolean()
+        .withMessage('isForwarded must be a boolean')
 ];
 
 const updateMessageValidation = [

@@ -54,14 +54,18 @@ class MessageService {
                 const json = m.toJSON();
                 return {
                     ...json,
-                    content: json.type == 'text' ? json.content : buildAvatarUrl(json.content, baseUrl),
+                    mediaUrl: json.mediaUrl ? buildAvatarUrl(json.mediaUrl, baseUrl) : null,
                     sender: {
                         ...m.sender.toJSON(),
                         avatarUrl: buildAvatarUrl(m.sender.avatarUrl, baseUrl),
                     },
                     repliedMessage: m.repliedMessage != null ? {
                         ...m.repliedMessage.toJSON(),
-                        content: m.repliedMessage.type == 'text' ? m.repliedMessage.content : buildAvatarUrl(m.repliedMessage.content, baseUrl),
+                        mediaUrl: m.repliedMessage.mediaUrl ? buildAvatarUrl(m.repliedMessage.mediaUrl, baseUrl) : null,
+                        sender: {
+                            ...m.repliedMessage.sender.toJSON(),
+                            avatarUrl: buildAvatarUrl(m.repliedMessage.sender.avatarUrl, baseUrl),
+                        }
                     } : null,
                     isSendByMe: m.senderId == currentUserId,
                 };
@@ -77,7 +81,7 @@ class MessageService {
      * Send a message
      */
     static async sendMessage(userId, data, baseUrl) {
-        const { conversationId, content, type = 'text', repliedMessageId } = data;
+        const { conversationId, content, type = 'text', repliedMessageId, mediaUrl, mediaFileType, mediaSize, mediaFileName } = data;
 
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
@@ -104,6 +108,10 @@ class MessageService {
             content,
             type,
             repliedMessageId,
+            mediaUrl,
+            mediaFileType,
+            mediaSize,
+            mediaFileName
         });
 
         // Get message with sender info
@@ -128,7 +136,7 @@ class MessageService {
 
         const msgOut = {
             ...messageWithSender.toJSON(),
-            content: messageWithSender.type !== 'text' ? buildAvatarUrl(messageWithSender.content, baseUrl) : messageWithSender.content,
+            mediaUrl: messageWithSender.mediaUrl ? buildAvatarUrl(messageWithSender.mediaUrl, baseUrl) : null,
             sender: {
                 ...messageWithSender.sender.toJSON(),
                 avatarUrl: buildAvatarUrl(messageWithSender.sender.avatarUrl, baseUrl),
@@ -136,7 +144,11 @@ class MessageService {
             repliedMessage: messageWithSender.repliedMessage
                 ? {
                     ...messageWithSender.repliedMessage.toJSON(),
-                    content: messageWithSender.repliedMessage.type == 'text' ? messageWithSender.repliedMessage.content : buildAvatarUrl(messageWithSender.repliedMessage.content, baseUrl),
+                    mediaUrl: messageWithSender.repliedMessage.mediaUrl ? buildAvatarUrl(messageWithSender.repliedMessage.mediaUrl, baseUrl) : null,
+                    sender: {
+                        ...messageWithSender.repliedMessage.sender.toJSON(),
+                        avatarUrl: buildAvatarUrl(messageWithSender.repliedMessage.sender.avatarUrl, baseUrl),
+                    }
                 } : null,
         };
 

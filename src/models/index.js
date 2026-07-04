@@ -29,6 +29,7 @@ ConversationParticipant.belongsTo(Message, { foreignKey: 'last_read_message_id',
 Message.belongsTo(User, { foreignKey: 'sender_id', as: 'sender' });
 Message.belongsTo(Conversation, { foreignKey: 'conversation_id', as: 'conversation' });
 Message.belongsTo(Message, { as: 'repliedMessage', foreignKey: 'replied_message_id' });
+Message.belongsTo(Message, { as: 'forwardedFromMessage', foreignKey: 'forwarded_from_message_id' });
 
 // BlockedUser associations
 BlockedUser.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
