@@ -9,8 +9,9 @@ const socketHandlers = (socket, io) => {
 
             const user = await AuthService.validateSocketToken(token);
 
-            socket.userId = user.userId;
-            socket.username = user.username;
+            socket.userId = user.id;
+            socket.userName = user.name;
+            socket.userUsername = user.username;
 
             socket.join(`user_${socket.userId}`);
             socket.emit('authenticated', {
@@ -18,7 +19,7 @@ const socketHandlers = (socket, io) => {
                 userId: socket.userId
             });
 
-            // console.log(`User ${socket.username || socket.userId} authenticated via socket`);
+            // console.log(`User ${socket.userUsername || socket.userId} authenticated via socket`);
         } catch (error) {
             console.error('Socket authentication error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
@@ -34,6 +35,8 @@ const socketHandlers = (socket, io) => {
                 return;
             }
 
+            console.log('SocketHandlers - join_conversation', data);
+
             const { conversationId } = data;
 
             // Check if user is participant in this conversation
@@ -47,7 +50,7 @@ const socketHandlers = (socket, io) => {
             socket.join(`conversation_${conversationId}`);
             socket.emit('joined_conversation', { conversationId });
 
-            // console.log(`User ${socket.username} joined conversation ${conversationId}`);
+            // console.log(`User ${socket.userUsername} joined conversation ${conversationId}`);
         } catch (error) {
             console.error('Join conversation error:', error);
             socket.emit('error', { message: 'Failed to join conversation' });
@@ -61,7 +64,7 @@ const socketHandlers = (socket, io) => {
             socket.leave(`conversation_${conversationId}`);
             socket.emit('left_conversation', { conversationId });
 
-            // console.log(`User ${socket.username} left conversation ${conversationId}`);
+            // console.log(`User ${socket.userUsername} left conversation ${conversationId}`);
         } catch (error) {
             console.error('Leave conversation error:', error);
             socket.emit('error', { message: 'Failed to leave conversation' });
@@ -69,31 +72,61 @@ const socketHandlers = (socket, io) => {
     });
 
     // Handle typing indicators
-    socket.on('typing_start', (data) => {
+    socket.on('typing_start', async (data) => {
         try {
-            if (!socket.userId) return;
+            const currentUserId = socket.userId;
+            if (!currentUserId) return;
 
             const { conversationId } = data;
+
+            const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
+
             socket.to(`conversation_${conversationId}`).emit('user_typing', {
                 userId: socket.userId,
-                username: socket.username,
+                userName: socket.userName,
+                userUsername: socket.userUsername,
                 conversationId
             });
+
+            for (const participantId of participantIds) {
+                console.log(participantId);
+                socket.to(`user_${participantId}`).emit('conversation_user_typing', {
+                    userId: socket.userId,
+                    userName: socket.userName,
+                    userUsername: socket.userUsername,
+                    conversationId
+                });
+            }
         } catch (error) {
             console.error('Typing start error:', error);
         }
     });
 
-    socket.on('typing_stop', (data) => {
+    socket.on('typing_stop', async (data) => {
         try {
-            if (!socket.userId) return;
+            const currentUserId = socket.userId;
+            if (!currentUserId) return;
 
             const { conversationId } = data;
+
+            const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
+
             socket.to(`conversation_${conversationId}`).emit('user_stopped_typing', {
                 userId: socket.userId,
-                username: socket.username,
+                userName: socket.userName,
+                userUsername: socket.userUsername,
                 conversationId
             });
+
+            for (const participantId of participantIds) {
+                console.log(participantId);
+                socket.to(`user_${participantId}`).emit('conversation_user_stopped_typing', {
+                    userId: socket.userId,
+                    userName: socket.userName,
+                    userUsername: socket.userUsername,
+                    conversationId
+                });
+            }
         } catch (error) {
             console.error('Typing stop error:', error);
         }
@@ -109,7 +142,8 @@ const socketHandlers = (socket, io) => {
             // Broadcast status to all user's conversations
             socket.broadcast.emit('user_status_changed', {
                 userId: socket.userId,
-                username: socket.username,
+                userName: socket.userName,
+                userUsername: socket.userUsername,
                 status
             });
         } catch (error) {
@@ -121,12 +155,13 @@ const socketHandlers = (socket, io) => {
     socket.on('disconnect', () => {
         try {
             if (socket.userId) {
-                // console.log(`User ${socket.username} disconnected`);
+                // console.log(`User ${socket.userUsername} disconnected`);
 
                 // Broadcast offline status
                 socket.broadcast.emit('user_status_changed', {
                     userId: socket.userId,
-                    username: socket.username,
+                    userName: socket.userName,
+                    userUsername: socket.userUsername,
                     status: 'offline'
                 });
             }

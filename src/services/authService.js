@@ -25,10 +25,7 @@ class AuthService {
                 )
             }
 
-            return {
-                userId: user.id,
-                username: user.username
-            };
+            return user.toJSON();
         } catch (error) {
             throw new AppError(
                 {

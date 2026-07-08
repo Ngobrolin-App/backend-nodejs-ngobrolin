@@ -31,7 +31,7 @@ const Message = sequelize.define('Message', {
         type: DataTypes.STRING(20),
         defaultValue: 'text',
         validate: {
-            isIn: [['text', 'image', 'file', 'audio', 'video']]
+            isIn: [['text', 'image', 'file', 'audio', 'video', 'system']]
         }
     },
     isRead: {
@@ -66,16 +66,20 @@ const Message = sequelize.define('Message', {
             key: 'id'
         }
     },
-    isForwarded: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
     forwardedCount: {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
     mediaFileName: {
         type: DataTypes.TEXT,
+        allowNull: true
+    },
+    systemEventType: {
+        type: DataTypes.STRING(50),
+        allowNull: true
+    },
+    systemMetadata: {
+        type: DataTypes.JSONB,
         allowNull: true
     }
 }, {

@@ -121,7 +121,12 @@ class MessageController {
     static async uploadAttachment(req, res) {
         try {
             if (!req.file) {
-                return res.status(400).json({ error: 'No file uploaded' });
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'no_file_uploaded',
+                    errors: errors.array(),
+                });
             }
             const type = req.body.type || req.query.type || 'file';
             const url = `/uploads/messages/${req.file.filename}`;
@@ -231,12 +236,14 @@ class MessageController {
                 messageId
             );
 
+            const { updatedMessageIds, participantUserIds } = result
+
             // Emit to socket
             if (req.io) {
-                if (result.updatedMessageIds.length > 0) {
+                if (updatedMessageIds.length > 0) {
                     req.io.to(`conversation_${conversationId}`).emit('messages_read_status_updated', {
                         conversationId,
-                        messageIds: result.updatedMessageIds
+                        messageIds: updatedMessageIds
                     });
                 }
                 // Emit to user's personal room to update ChatList (unread count -> 0)
@@ -244,6 +251,13 @@ class MessageController {
                     conversationId,
                     lastReadMessageId: messageId
                 });
+
+                for (const userId of participantUserIds) {
+                    req.io.to(`user_${userId}`).emit('conversation_messages_status_updated', {
+                        conversationId,
+                        messageIds: updatedMessageIds
+                    });
+                }
             }
 
             ApiResponse.success(res, {

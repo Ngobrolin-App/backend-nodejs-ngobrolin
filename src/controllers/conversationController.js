@@ -43,6 +43,36 @@ class ConversationController {
         }
     }
 
+    static async uploadGroupImage(req, res) {
+        try {
+            if (!req.file) {
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'no_file_uploaded',
+                    errors: errors.array(),
+                });
+            }
+            const url = `/uploads/group-images/${req.file.filename}`;
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    url: url,
+                },
+            });
+        } catch (error) {
+            console.error('ConversationController - uploadGroupImage() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
+        }
+    }
+
     // Create new conversation
     static async createConversation(req, res) {
         try {
@@ -52,7 +82,7 @@ class ConversationController {
                     message: 'validation_failed',
                     code: 400,
                     statusCode: 'BAD_REQUEST',
-                    errors: error.array()
+                    errors: errors.array()
                 });
             }
 
@@ -64,13 +94,16 @@ class ConversationController {
                 req.body,
                 baseUrl
             );
+            console.log('ConversationController - createConversation() result:', result);
+            console.log('ConversationController - conversation:', result.conversation);
+            console.log('ConversationController - conversation participants:', result.conversation.participants);
 
             // Emit realtime events if not existing
-            if (!result.isExisting && req.io && result.participants && result.payload) {
-                result.participants.forEach(userId => {
-                    req.io.to(`user_${userId}`).emit('conversation_created', result.payload);
-                });
-            }
+            // if (!result.isExisting && req.io && result.conversation.participants && result.payload) {
+            result.conversation.participants.forEach(participant => {
+                req.io.to(`user_${participant.id}`).emit('conversation_created', result.conversation);
+            });
+            // }
 
             if (result.isExisting) {
                 return ApiResponse.success(res, {

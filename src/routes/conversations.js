@@ -2,6 +2,7 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const ConversationController = require('../controllers/conversationController');
 const { authenticateToken } = require('../middleware/auth');
+const { uploadGroupImage } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -24,10 +25,18 @@ const createConversationValidation = [
         .isLength({ min: 1, max: 100 })
         .withMessage('Group name must be between 1 and 100 characters')
         .trim(),
+    body('participantIds')
+        .if(body('type').equals('group'))
+        .isArray({ min: 1 })
+        .withMessage('Participant IDs must be a non-empty array'),
+    body('participantIds.*')
+        .if(body('type').equals('group'))
+        .isUUID()
+        .withMessage('Each participant ID must be a valid UUID'),
     body('groupImage')
         .optional()
-        .isURL()
-        .withMessage('Group image must be a valid URL')
+        .isString()
+        .withMessage('Group image must be a string')
 ];
 
 const updateConversationValidation = [
@@ -43,11 +52,8 @@ const updateConversationValidation = [
         .trim(),
     body('groupImage')
         .optional()
-        .custom((value) => {
-            if (value === null || value === '') return true;
-            return /^https?:\/\/.+/.test(value);
-        })
-        .withMessage('Group image must be a valid URL or null')
+        .isString()
+        .withMessage('Group image must be a string')
 ];
 
 const getConversationValidation = [
@@ -119,5 +125,6 @@ router.post('/create', authenticateToken, createConversationValidation, Conversa
 router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);
 router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);
 router.post('/leave', authenticateToken, leaveConversationValidation, ConversationController.leaveConversation);
+router.post('/upload-group-image', authenticateToken, uploadGroupImage.single('groupImage'), ConversationController.uploadGroupImage);
 
 module.exports = router;

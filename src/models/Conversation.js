@@ -22,9 +22,6 @@ const Conversation = sequelize.define('Conversation', {
     groupImage: {
         type: DataTypes.TEXT,
         allowNull: true,
-        validate: {
-            isUrl: true
-        }
     }
 }, {
     tableName: 'tblconversations',

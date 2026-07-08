@@ -63,10 +63,6 @@ const sendMessageValidation = [
         .optional()
         .isUUID()
         .withMessage('Forwarded From Message ID must be a valid UUID'),
-    body('isForwarded')
-        .optional()
-        .isBoolean()
-        .withMessage('isForwarded must be a boolean')
 ];
 
 const updateMessageValidation = [

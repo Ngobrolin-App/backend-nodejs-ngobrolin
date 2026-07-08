@@ -30,10 +30,26 @@ const messageStorage = multer.diskStorage({
     }
 });
 
+// Multer storage for avatar uploads
+const groupImageStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', '..', 'uploads', 'group-images');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const prefix = req.user?.userId || 'unknown';
+        cb(null, `${prefix}_${Date.now()}${ext}`);
+    }
+});
+
 const uploadAvatar = multer({ storage: avatarStorage });
 const uploadMessage = multer({ storage: messageStorage });
+const uploadGroupImage = multer({ storage: groupImageStorage });
 
 module.exports = {
     uploadAvatar,
-    uploadMessage
+    uploadMessage,
+    uploadGroupImage
 };

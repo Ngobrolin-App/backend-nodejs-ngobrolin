@@ -88,10 +88,11 @@ class ConversationService {
 
             return {
                 ...conversation.toJSON(),
-                privatePartnerUser: {
+                groupImage: conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null,
+                privatePartnerUser: (privatePartnerUser) ? {
                     ...privatePartnerUser.toJSON(),
                     avatarUrl: buildAvatarUrl(privatePartnerUser.avatarUrl, baseUrl),
-                },
+                } : null,
                 participants: otherParticipants.map(p => ({
                     ...p.user.toJSON(),
                     avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
@@ -111,10 +112,10 @@ class ConversationService {
 
         return {
             conversations: formattedConversations,
-            total: formattedConversations.length,
+            total: conversations.count,
             page: parseInt(page),
             limit: parseInt(limit),
-            totalPages: Math.ceil(formattedConversations.length / limit)
+            totalPages: Math.ceil(conversations.count / limit)
         };
     }
 
@@ -201,11 +202,42 @@ class ConversationService {
         }
     }
 
+    static async getConversationParticipantIds(
+        userId,
+        conversationId,
+        isIncludeMe = true
+    ) {
+        if (!conversationId) {
+            throw new AppError({
+                message: 'conversationid_required',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
+        }
+
+        const where = {
+            conversationId,
+        };
+
+        if (!isIncludeMe) {
+            where.userId = {
+                [Op.ne]: userId,
+            };
+        }
+
+        const participantRows = await ConversationParticipant.findAll({
+            where,
+            attributes: ['userId'],
+        });
+
+        return participantRows.map(participant => participant.userId);
+    }
+
     /**
      * Create a new conversation
      */
     static async createConversation(userId, data, baseUrl) {
-        const { participantId, type = 'private', name, groupImage } = data;
+        const { type = 'private', participantId, name, participantIds, groupImage } = data;
 
         // For private conversations
         if (type === 'private') {
@@ -300,6 +332,18 @@ class ConversationService {
                 }
             }
         }
+        if (type === 'group') {
+            if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
+                throw new AppError(
+                    {
+                        message: 'participantids_required',
+                        code: 400,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                );
+            }
+        }
+
 
         // Create conversation
         const conversation = await Conversation.create({
@@ -308,20 +352,42 @@ class ConversationService {
             groupImage: type === 'group' ? groupImage : null
         });
 
-        // Add participants
-        const participants = [userId];
-        if (type === 'private' && participantId) {
-            participants.push(participantId);
+        let uniqueParticipantsToInsert = [];
+
+        if (type === 'private') {
+            uniqueParticipantsToInsert = [userId, participantId];
+        } else if (type === 'group') {
+            uniqueParticipantsToInsert = [...new Set([userId, ...participantIds])];
         }
 
+        console.log('ConversationService - createConversation() uniqueParticipantsToInsert:', uniqueParticipantsToInsert);
+
         await Promise.all(
-            participants.map(uid =>
+            uniqueParticipantsToInsert.map(uid =>
                 ConversationParticipant.create({
                     conversationId: conversation.id,
                     userId: uid
                 })
             )
         );
+
+        const userData = await User.findByPk(userId);
+
+        if (conversation.type == 'group') {
+            const systemMessage = await Message.create({
+                conversationId: conversation.id,
+                senderId: userId,
+                type: 'system',
+                content: `${userData.name} created a group chat`,
+                systemEventType: 'GROUP_CREATED',
+                systemMetadata: {
+                    actorId: userData.id,
+                    actorName: userData.name,
+                    conversationId: conversation.id,
+                    groupName: conversation.name,
+                }
+            });
+        }
 
         // Get participant details for real-time event
         const participantRows = await ConversationParticipant.findAll({
@@ -334,23 +400,20 @@ class ConversationService {
             ]
         });
 
-        const payload = {
-            conversation: {
-                ...conversation.toJSON(),
-                participants: participantRows.map(p => ({
-                    ...p.user.toJSON(),
-                    avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
-                })),
-                createdAt: conversation.createdAt
-            }
+        const finalConversation = {
+            ...conversation.toJSON(),
+            groupImage: conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null,
+            participants: participantRows.map(p => ({
+                ...p.user.toJSON(),
+                avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
+            })),
+            createdAt: conversation.createdAt
         };
 
         return {
             message: 'create_conversation_success',
-            conversation: conversation.toJSON(),
+            conversation: finalConversation,
             isExisting: false,
-            participants: participants, // List of user IDs
-            payload: payload // Full payload for socket
         };
     }
 
@@ -406,6 +469,8 @@ class ConversationService {
         }
 
         let result = conversation.toJSON();
+
+        result.groupImage = conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null;
 
         if (isShowParticipants && conversation.participants) {
             result.participants = conversation.participants.map(p => ({

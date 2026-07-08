@@ -343,9 +343,11 @@ class MessageService {
                 updatedMessageIds = toUpdate.map(m => m.id);
             }
         }
+        const participantUserIds = participants.map(m => m.userId);
 
         return {
-            updatedMessageIds
+            updatedMessageIds,
+            participantUserIds,
         };
     }
 }
