@@ -36,7 +36,13 @@ const createConversationValidation = [
     body('groupImage')
         .optional()
         .isString()
-        .withMessage('Group image must be a string')
+        .withMessage('Group image must be a string'),
+    body('createdByUserId')
+        .if(body('type').equals('group'))
+        .notEmpty()
+        .withMessage('Created By User ID is required for group conversations')
+        .isUUID()
+        .withMessage('Created By User ID must be a valid UUID'),
 ];
 
 const updateConversationValidation = [
@@ -104,6 +110,14 @@ const privateConversationValidation = [
 ];
 
 const getConversationParticipantsValidation = [
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100'),
     body('conversationId')
         .notEmpty()
         .withMessage('Conversation ID is required')

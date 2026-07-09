@@ -164,7 +164,8 @@ class ConversationService {
 
     }
 
-    static async getConversationParticipants(userId, conversationId, isIncludeMe = true, baseUrl) {
+    static async getConversationParticipants(userId, conversationId, isIncludeMe = true, baseUrl, page = 1, limit = 20) {
+        const offset = (page - 1) * limit;
         const userWhere = {};
 
         if (!conversationId) {
@@ -181,7 +182,7 @@ class ConversationService {
             };
         }
 
-        const participantRows = await ConversationParticipant.findAll({
+        const participants = await ConversationParticipant.findAndCountAll({
             where: { conversationId: conversationId },
             include: [
                 {
@@ -189,16 +190,24 @@ class ConversationService {
                     as: 'user',
                     where: userWhere,
                 }
-            ]
+            ],
+            limit: parseInt(limit),
+            offset: parseInt(offset),
         });
 
 
         return {
-            participants: participantRows.map(p => ({
-                ...p.user.toJSON(),
-                avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
-                conversationId: conversationId,
+            participants: participants.rows.map(p => ({
+                ...p.toJSON(),
+                user: {
+                    ...p.user.toJSON(),
+                    avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
+                },
             })),
+            total: participants.count,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(participants.count / limit)
         }
     }
 
@@ -237,7 +246,7 @@ class ConversationService {
      * Create a new conversation
      */
     static async createConversation(userId, data, baseUrl) {
-        const { type = 'private', participantId, name, participantIds, groupImage } = data;
+        const { type = 'private', participantId, name, participantIds, groupImage, createdByUserId } = data;
 
         // For private conversations
         if (type === 'private') {
@@ -342,6 +351,15 @@ class ConversationService {
                     }
                 );
             }
+            if (!createdByUserId) {
+                throw new AppError(
+                    {
+                        message: 'createdbyuserid_required',
+                        code: 400,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                );
+            }
         }
 
 
@@ -349,7 +367,8 @@ class ConversationService {
         const conversation = await Conversation.create({
             type,
             name: type === 'group' ? name : null,
-            groupImage: type === 'group' ? groupImage : null
+            groupImage: type === 'group' ? groupImage : null,
+            createdByUserId: createdByUserId
         });
 
         let uniqueParticipantsToInsert = [];
@@ -445,19 +464,25 @@ class ConversationService {
         }
 
         const conversation = await Conversation.findByPk(conversationId, {
-            include: isShowParticipants ? [
+            include: [
                 {
-                    model: ConversationParticipant,
-                    as: 'participants',
-                    include: [
-                        {
-                            model: User,
-                            as: 'user',
-                            where: userWhere,
-                        }
-                    ]
-                }
-            ] : undefined
+                    model: User,
+                    as: 'createdByUser',
+                },
+                ...(isShowParticipants
+                    ? [{
+                        model: ConversationParticipant,
+                        as: 'participants',
+                        include: [
+                            {
+                                model: User,
+                                as: 'user',
+                                where: userWhere,
+                            }
+                        ]
+                    }]
+                    : [])
+            ]
         });
 
         if (!conversation) {
@@ -471,7 +496,14 @@ class ConversationService {
         let result = conversation.toJSON();
 
         result.groupImage = conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null;
-
+        if (result.createdByUser) {
+            result.createdByUser = {
+                ...conversation.createdByUser.toJSON(),
+                avatarUrl: conversation.createdByUser.avatarUrl ?
+                    buildAvatarUrl(conversation.createdByUser.avatarUrl, baseUrl)
+                    : null,
+            };
+        }
         if (isShowParticipants && conversation.participants) {
             result.participants = conversation.participants.map(p => ({
                 ...p.user.toJSON(),

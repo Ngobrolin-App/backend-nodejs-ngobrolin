@@ -22,10 +22,22 @@ const Conversation = sequelize.define('Conversation', {
     groupImage: {
         type: DataTypes.TEXT,
         allowNull: true,
+    },
+    groupDescription: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    createdByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
     }
 }, {
     tableName: 'tblconversations',
-    updatedAt: false
+    indexes: [
+        {
+            fields: ['created_by_user_id']
+        }
+    ]
 });
 
 module.exports = Conversation;

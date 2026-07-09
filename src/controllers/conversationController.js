@@ -94,16 +94,13 @@ class ConversationController {
                 req.body,
                 baseUrl
             );
-            console.log('ConversationController - createConversation() result:', result);
-            console.log('ConversationController - conversation:', result.conversation);
-            console.log('ConversationController - conversation participants:', result.conversation.participants);
 
             // Emit realtime events if not existing
-            // if (!result.isExisting && req.io && result.conversation.participants && result.payload) {
-            result.conversation.participants.forEach(participant => {
-                req.io.to(`user_${participant.id}`).emit('conversation_created', result.conversation);
-            });
-            // }
+            if (!result.isExisting && req.io && result.conversation.participants) {
+                result.conversation.participants.forEach(participant => {
+                    req.io.to(`user_${participant.id}`).emit('conversation_created', result.conversation);
+                });
+            }
 
             if (result.isExisting) {
                 return ApiResponse.success(res, {
@@ -146,6 +143,8 @@ class ConversationController {
                 isParticipantsIncludeMe,
                 baseUrl
             );
+
+            console.log('ConversationController - getConversationById - conversation:', conversation);
 
             ApiResponse.success(res, {
                 message: 'data_retrieved',
@@ -201,7 +200,7 @@ class ConversationController {
 
     static async getConversationParticipants(req, res) {
         try {
-            const { conversationId, isIncludeMe = true } = req.body;
+            const { page, limit, conversationId, isIncludeMe = true } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
             const currentUserId = req.user.userId;
 
@@ -209,14 +208,24 @@ class ConversationController {
                 currentUserId,
                 conversationId,
                 isIncludeMe,
-                baseUrl
+                baseUrl,
+                page,
+                limit
             );
 
             ApiResponse.success(res, {
                 code: 200,
                 status: 'OK',
                 message: 'data_retrieved',
-                data: result.participants,
+                data: {
+                    participants: result.participants,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
+                }
 
             });
         } catch (error) {

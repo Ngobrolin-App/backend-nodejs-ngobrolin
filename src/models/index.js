@@ -19,6 +19,7 @@ User.hasMany(FCMToken, { foreignKey: 'user_id', as: 'fcmTokens' });
 // Conversation associations
 Conversation.hasMany(ConversationParticipant, { foreignKey: 'conversation_id', as: 'participants' });
 Conversation.hasMany(Message, { foreignKey: 'conversation_id', as: 'messages' });
+Conversation.belongsTo(User, { foreignKey: 'created_by_user_id', as: 'createdByUser' });
 
 // ConversationParticipant associations
 ConversationParticipant.belongsTo(User, { foreignKey: 'user_id', as: 'user' });

@@ -81,10 +81,17 @@ const Message = sequelize.define('Message', {
     systemMetadata: {
         type: DataTypes.JSONB,
         allowNull: true
-    }
+    },
+    isUnsent: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    isEdited: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
 }, {
     tableName: 'tblmessages',
-    updatedAt: false,
     indexes: [
         {
             fields: ['conversation_id']
