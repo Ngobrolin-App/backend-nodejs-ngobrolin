@@ -281,7 +281,7 @@ class ConversationController {
     // Leave conversation
     static async leaveConversation(req, res) {
         try {
-            const { conversationId } = req.params;
+            const { conversationId } = req.body;
             const currentUserId = req.user.userId;
 
             await ConversationService.leaveConversation(conversationId, currentUserId);

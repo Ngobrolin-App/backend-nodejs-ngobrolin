@@ -379,8 +379,6 @@ class ConversationService {
             uniqueParticipantsToInsert = [...new Set([userId, ...participantIds])];
         }
 
-        console.log('ConversationService - createConversation() uniqueParticipantsToInsert:', uniqueParticipantsToInsert);
-
         await Promise.all(
             uniqueParticipantsToInsert.map(uid =>
                 ConversationParticipant.create({
@@ -581,6 +579,26 @@ class ConversationService {
                 statusCode: 'NOT_FOUND',
             });
         }
+
+        const conversationData = await Conversation.findByPk(conversationId);
+        const userData = await User.findByPk(userId);
+
+        if (conversationData.type == 'group') {
+            const systemMessage = await Message.create({
+                conversationId: conversationId,
+                senderId: userId,
+                type: 'system',
+                content: `${userData.name} left the group`,
+                systemEventType: 'USER_LEFT',
+                systemMetadata: {
+                    actorId: userData.id,
+                    actorName: userData.name,
+                    conversationId: conversationData.id,
+                    groupName: conversationData.name,
+                }
+            });
+        }
+
 
         await participation.destroy();
 
