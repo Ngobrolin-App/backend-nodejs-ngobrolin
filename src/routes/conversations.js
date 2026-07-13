@@ -59,7 +59,13 @@ const updateConversationValidation = [
     body('groupImage')
         .optional()
         .isString()
-        .withMessage('Group image must be a string')
+        .withMessage('Group image must be a string'),
+    body('groupDescription')
+        .optional()
+        .isString()
+        .withMessage('Group description must be a string')
+        .isLength({ max: 500 })
+        .withMessage('Group description can contain up to 500 characters')
 ];
 
 const getConversationValidation = [

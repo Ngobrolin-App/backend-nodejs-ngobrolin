@@ -1,10 +1,10 @@
 const { validationResult } = require('express-validator');
 const ConversationService = require('../services/conversationService');
+const MessageService = require('../services/messageService');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 
 class ConversationController {
-    // Get all conversations for current user
     static async getConversations(req, res) {
         try {
             const { page = 1, limit = 20 } = req.query;
@@ -144,8 +144,6 @@ class ConversationController {
                 baseUrl
             );
 
-            console.log('ConversationController - getConversationById - conversation:', conversation);
-
             ApiResponse.success(res, {
                 message: 'data_retrieved',
                 code: 200,
@@ -254,11 +252,14 @@ class ConversationController {
 
             const { conversationId } = req.body;
             const currentUserId = req.user.userId;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
 
             const conversation = await ConversationService.updateConversation(
                 conversationId,
                 currentUserId,
-                req.body
+                req.body,
+                baseUrl,
+                req.io,
             );
 
             ApiResponse.success(res, {
@@ -284,19 +285,43 @@ class ConversationController {
             const { conversationId } = req.body;
             const currentUserId = req.user.userId;
 
-            await ConversationService.leaveConversation(conversationId, currentUserId);
+            const result = await ConversationService.leaveConversation(conversationId, currentUserId);
+
+            if (result && req.io) {
+                req.io.to(`conversation_${conversationId}`).emit('left_participant', currentUserId);
+
+                if (result.message) {
+                    req.io.to(`conversation_${conversationId}`).emit('new_message', result);
+                }
+
+                const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
+
+                for (const participantId of participantIds) {
+
+                    const unreadCount = await MessageService.getUnreadCount(conversationId, participantId);
+
+                    const conversationUpdatedPayload = {
+                        conversationId: result.conversationId,
+                        lastMessage: result.message,
+                        unreadCount: unreadCount,
+                    }
+
+                    req.io.to(`user_${participantId}`).emit('conversation_updated', conversationUpdatedPayload);
+                }
+            }
 
             ApiResponse.success(res, {
                 code: 200,
                 statusCode: 'OK',
                 message: 'left_conversation_success',
             });
+
         } catch (error) {
             console.error('ConversationController - leaveConversation() error:', error);
             ApiResponse.error(res, {
-                code: error.code,
-                statusCode: error.statusCode,
-                message: error.message,
+                code: error.code || 500,
+                statusCode: error.statusCode || 'INTERNAL_SERVER_ERROR',
+                message: error.message || 'An unexpected error occurred',
                 errors: error.errors || []
             });
         }

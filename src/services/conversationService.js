@@ -1,12 +1,10 @@
 const { Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
+const MessageService = require('../services/messageService');
 const { Op, fn, col, where } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
 const AppError = require('../utils/appError');
 
 class ConversationService {
-    /**
-     * Check if user is participant in conversation
-     */
     static async isParticipant(conversationId, userId) {
         const participation = await ConversationParticipant.findOne({
             where: {
@@ -17,9 +15,6 @@ class ConversationService {
         return !!participation;
     }
 
-    /**
-     * Get all conversations for a user with pagination and formatting
-     */
     static async getConversations(userId, baseUrl, page = 1, limit = 20) {
         const offset = (page - 1) * limit;
 
@@ -60,13 +55,11 @@ class ConversationService {
             order: [['joinedAt', 'DESC']]
         });
 
-        // Format response with accurate unread count
         const formattedConversations = await Promise.all(conversations.rows.map(async participant => {
             const conversation = participant.conversation;
             const otherParticipants = conversation.participants.filter(p => p.userId !== userId);
             let privatePartnerUser = null;
             if (conversation.type == 'private') {
-                // Gunakan akses indeks [0] dan pastikan aman
                 privatePartnerUser = otherParticipants[0]?.user;
             }
 
@@ -515,15 +508,11 @@ class ConversationService {
     /**
      * Update conversation (group)
      */
-    static async updateConversation(conversationId, userId, data) {
-        const { name, groupImage } = data;
+    static async updateConversation(conversationId, userId, data, baseUrl, io) {
+        const { name, groupImage, groupDescription } = data;
 
-        // Check if user is participant
         const participation = await ConversationParticipant.findOne({
-            where: {
-                conversationId: conversationId,
-                userId: userId
-            }
+            where: { conversationId, userId }
         });
 
         if (!participation) {
@@ -535,30 +524,100 @@ class ConversationService {
         }
 
         const conversation = await Conversation.findByPk(conversationId);
-
         if (!conversation) {
-            throw new AppError({
-                message: 'conversation_not_found',
-                code: 404,
-                statusCode: 'NOT_FOUND',
-            });
+            throw new AppError({ message: 'conversation_not_found', code: 404, statusCode: 'NOT_FOUND' });
         }
-
         if (conversation.type !== 'group') {
-            throw new AppError({
-                message: 'can_only_update_group_conversations',
-                code: 400,
-                statusCode: 'BAD_REQUEST',
+            throw new AppError({ message: 'can_only_update_group_conversations', code: 400, statusCode: 'BAD_REQUEST' });
+        }
+
+        const userData = await User.findByPk(userId);
+
+        const changes = {};
+        const systemMessagesToCreate = [];
+
+        if (name !== undefined && name !== conversation.name) {
+            changes.name = name;
+            systemMessagesToCreate.push({
+                content: `${userData.name} changed the group name to "${name}"`,
+                systemEventType: 'GROUP_NAME_CHANGED'
             });
         }
 
-        // Update conversation
-        await conversation.update({
-            name: name || conversation.name,
-            groupImage: groupImage !== undefined ? groupImage : conversation.groupImage
-        });
+        if (groupDescription !== undefined && groupDescription !== conversation.groupDescription) {
+            changes.groupDescription = groupDescription;
+            systemMessagesToCreate.push({
+                content: `${userData.name} changed the group description`,
+                systemEventType: 'GROUP_DESCRIPTION_CHANGED'
+            });
+        }
 
-        return conversation;
+        if (groupImage !== undefined && groupImage !== conversation.groupImage) {
+            changes.groupImage = groupImage;
+            systemMessagesToCreate.push({
+                content: `${userData.name} changed the group photo`,
+                systemEventType: 'GROUP_IMAGE_CHANGED'
+            });
+        }
+
+        if (Object.keys(changes).length === 0) {
+            return conversation;
+        }
+
+        // 4. Update Conversation
+        await conversation.update(changes);
+
+        // 5. Buat System Messages dan Emit via Socket
+        const createdMessages = [];
+        for (const sysMsg of systemMessagesToCreate) {
+            const systemMessage = await Message.create({
+                conversationId: conversation.id,
+                senderId: userId,
+                type: 'system',
+                content: sysMsg.content,
+                systemEventType: sysMsg.systemEventType,
+                systemMetadata: {
+                    actorId: userData.id,
+                    actorName: userData.name,
+                    conversationId: conversation.id,
+                    groupName: conversation.name,
+                    groupDescription: conversation.groupDescription,
+                }
+            });
+            createdMessages.push(systemMessage);
+        }
+
+        const finalConversation = {
+            ...conversation.toJSON(),
+            groupImage: conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null,
+        };
+
+        if (io && createdMessages.length > 0) {
+            const participants = await ConversationParticipant.findAll({
+                where: { conversationId: conversation.id },
+                include: [{ model: User, as: 'user' }]
+            });
+
+
+
+            // Emit setiap pesan sistem yang baru terbentuk
+            for (const newMsg of createdMessages) {
+                io.to(`conversation_${conversationId}`).emit('new_message', { message: newMsg });
+
+                for (const p of participants) {
+                    const unreadCount = await MessageService.getUnreadCount(conversationId, p.userId);
+                    const payload = {
+                        conversationId,
+                        unreadCount,
+                        lastMessage: newMsg,
+                        updatedConversation: finalConversation
+                    };
+                    io.to(`user_${p.userId}`).emit('conversation_updated', payload);
+                }
+            }
+        }
+
+        return finalConversation;
     }
 
     /**
@@ -583,8 +642,9 @@ class ConversationService {
         const conversationData = await Conversation.findByPk(conversationId);
         const userData = await User.findByPk(userId);
 
+        let systemMessage = null;
         if (conversationData.type == 'group') {
-            const systemMessage = await Message.create({
+            systemMessage = await Message.create({
                 conversationId: conversationId,
                 senderId: userId,
                 type: 'system',
@@ -614,7 +674,10 @@ class ConversationService {
             });
         }
 
-        return true;
+        return {
+            conversationId: conversationId,
+            message: systemMessage
+        };
     }
 }
 
