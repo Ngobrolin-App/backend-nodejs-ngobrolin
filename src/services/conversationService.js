@@ -140,14 +140,11 @@ class ConversationService {
 
             ],
             group: [
-                'conversationId',
-                'conversation.id',
-                'conversation.type',
-                'conversation.name',
-                'conversation.groupImage'
+                'ConversationParticipant.conversation_id',
+                'conversation.id'
             ],
             having: where(
-                fn('COUNT', col('conversationId')),
+                fn('COUNT', col('ConversationParticipant.conversation_id')),
                 '=',
                 participantIds.length
             )
@@ -598,8 +595,6 @@ class ConversationService {
                 include: [{ model: User, as: 'user' }]
             });
 
-
-
             // Emit setiap pesan sistem yang baru terbentuk
             for (const newMsg of createdMessages) {
                 io.to(`conversation_${conversationId}`).emit('new_message', { message: newMsg });
@@ -676,6 +671,141 @@ class ConversationService {
 
         return {
             conversationId: conversationId,
+            message: systemMessage
+        };
+    }
+
+    /**
+     * Add participants to an existing group conversation
+     */
+    static async addConversationParticipants(conversationId, participantIds, currentUserId, baseUrl) {
+        // 1. Validasi input
+        if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
+            throw new AppError({
+                message: 'participantids_required',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
+        }
+
+        // 2. Cek apakah percakapan (grup) eksis
+        const conversation = await Conversation.findByPk(conversationId);
+        if (!conversation) {
+            throw new AppError({
+                message: 'conversation_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
+        }
+
+        if (conversation.type !== 'group') {
+            throw new AppError({
+                message: 'cannot_add_participant_to_private_chat',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
+        }
+
+        // 3. Pastikan user yang mengundang adalah anggota grup tersebut
+        const isMember = await ConversationParticipant.findOne({
+            where: { conversationId, userId: currentUserId },
+            include: [{ model: User, as: 'user' }] // Kita butuh nama user untuk system message
+        });
+
+        if (!isMember) {
+            throw new AppError({
+                message: 'you_are_not_a_participant',
+                code: 403,
+                statusCode: 'FORBIDDEN'
+            });
+        }
+
+        // 4. Cari tahu siapa saja target yang SUDAH ada di dalam grup untuk mencegah duplikat
+        const existingParticipants = await ConversationParticipant.findAll({
+            where: {
+                conversationId,
+                userId: { [Op.in]: participantIds }
+            }
+        });
+        const existingUserIds = existingParticipants.map(p => p.userId);
+
+        // 5. Saring hanya ID yang BELUM bergabung
+        const newIdsToAdd = participantIds.filter(id => !existingUserIds.includes(id));
+
+        if (newIdsToAdd.length === 0) {
+            throw new AppError({
+                message: 'all_users_already_in_group',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
+        }
+
+        // 6. Validasi apakah user target benar-benar ada di database (bukan UUID ngawur)
+        const usersToAdd = await User.findAll({
+            where: { id: { [Op.in]: newIdsToAdd } }
+        });
+
+        const validNewUserIds = usersToAdd.map(u => u.id);
+        if (validNewUserIds.length === 0) {
+            throw new AppError({
+                message: 'users_not_found',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
+        }
+
+        // 7. Tambahkan peserta ke database (Bulk Create)
+        const participantsData = validNewUserIds.map(userId => ({
+            conversationId,
+            userId,
+        }));
+        const createdParticipants = await ConversationParticipant.bulkCreate(participantsData, { returning: true });
+
+        // 8. Buat System Message (mengikuti pola di createConversation kamu)
+        const addedNames = usersToAdd.map(u => u.name).join(', ');
+        const actorName = isMember.user.name;
+
+        const systemMessage = await Message.create({
+            conversationId: conversation.id,
+            senderId: currentUserId,
+            type: 'system',
+            content: `${actorName} added ${addedNames}`,
+            systemEventType: 'USERS_ADDED',
+            systemMetadata: {
+                actorId: currentUserId,
+                actorName: actorName,
+                addedUserIds: validNewUserIds, // Simpan ID siapa saja yang masuk
+                addedUserNames: addedNames,
+                conversationId: conversation.id,
+                groupName: conversation.name,
+            }
+        });
+
+        // 9. Format response data
+        const finalConversation = {
+            ...conversation.toJSON(),
+            groupImage: conversation.groupImage ? buildAvatarUrl(conversation.groupImage, baseUrl) : null,
+        };
+
+        const addedParticipantsFormatted = createdParticipants.map(cp => {
+            const targetUser = usersToAdd.find(u => u.id === cp.userId);
+
+            return {
+                id: cp.id,
+                conversationId: cp.conversationId,
+                userId: cp.userId,
+                lastReadMessageId: cp.lastReadMessageId || null,
+                joinedAt: cp.joinedAt,
+                user: targetUser ? {
+                    ...targetUser.toJSON(),
+                    avatarUrl: buildAvatarUrl(targetUser.avatarUrl, baseUrl)
+                } : null
+            };
+        });
+
+        return {
+            conversation: finalConversation,
+            addedParticipants: addedParticipantsFormatted, // Sekarang bertipe List<ConversationParticipantModel>
             message: systemMessage
         };
     }

@@ -23,7 +23,7 @@ const socketHandlers = (socket, io) => {
         } catch (error) {
             console.error('Socket authentication error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
-            socket.disconnect();
+            socket.disconnect(true);
         }
     });
 
@@ -89,7 +89,6 @@ const socketHandlers = (socket, io) => {
             });
 
             for (const participantId of participantIds) {
-                console.log(participantId);
                 socket.to(`user_${participantId}`).emit('conversation_user_typing', {
                     userId: socket.userId,
                     userName: socket.userName,
@@ -119,7 +118,6 @@ const socketHandlers = (socket, io) => {
             });
 
             for (const participantId of participantIds) {
-                console.log(participantId);
                 socket.to(`user_${participantId}`).emit('conversation_user_stopped_typing', {
                     userId: socket.userId,
                     userName: socket.userName,
@@ -155,7 +153,7 @@ const socketHandlers = (socket, io) => {
     socket.on('disconnect', () => {
         try {
             if (socket.userId) {
-                // console.log(`User ${socket.userUsername} disconnected`);
+                console.log(`User ${socket.userUsername} disconnected`);
 
                 // Broadcast offline status
                 socket.broadcast.emit('user_status_changed', {

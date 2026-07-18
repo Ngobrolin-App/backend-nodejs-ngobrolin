@@ -137,10 +137,25 @@ const getConversationParticipantsValidation = [
         .default(true)
 ];
 
+const addConversationParticipantsValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+    body('participantIds')
+        .isArray({ min: 1 })
+        .withMessage('Participant IDs must be a non-empty array'),
+    body('participantIds.*')
+        .isUUID()
+        .withMessage('Each participant ID must be a valid UUID')
+];
+
 // Routes - All POST methods
 router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
 router.post('/private-conversation', authenticateToken, privateConversationValidation, ConversationController.getPrivateConversationByParticipantsIds);
 router.post('/participants', authenticateToken, getConversationParticipantsValidation, ConversationController.getConversationParticipants);
+router.post('/add-participants', authenticateToken, addConversationParticipantsValidation, ConversationController.addConversationParticipants);
 router.post('/create', authenticateToken, createConversationValidation, ConversationController.createConversation);
 router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);
 router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);

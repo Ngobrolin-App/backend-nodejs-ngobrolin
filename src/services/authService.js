@@ -27,6 +27,7 @@ class AuthService {
 
             return user.toJSON();
         } catch (error) {
+            console.log('AuthService - validateSocketToken - error: ', error);
             throw new AppError(
                 {
                     message: 'authentication_failed',
@@ -253,7 +254,6 @@ class AuthService {
             <p>If you did not request this, please ignore this email.</p>
             <p>This link will expire in 1 hour.</p>
         `;
-        // console.log('AuthService - forgotPassword - resetUrl:', resetUrl);
 
         // Send email asynchronously so we don't block the frontend response
         try {

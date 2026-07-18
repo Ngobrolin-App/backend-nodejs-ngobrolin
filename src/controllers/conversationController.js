@@ -326,6 +326,74 @@ class ConversationController {
             });
         }
     }
+
+    // Add participants to an existing group conversation
+    static async addConversationParticipants(req, res) {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                throw new AppError({
+                    message: 'validation_failed',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    errors: errors.array(),
+                });
+            }
+
+            const { conversationId, participantIds } = req.body;
+            const currentUserId = req.user.userId;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+            // Panggil service untuk memproses penambahan anggota
+            const result = await ConversationService.addConversationParticipants(
+                conversationId,
+                participantIds,
+                currentUserId,
+                baseUrl
+            );
+
+            // Emit realtime events via Socket.io
+            if (result && req.io) {
+                if (result.message) {
+                    req.io.to(`conversation_${conversationId}`).emit('new_message', {
+                        conversationId: conversationId,
+                        message: result.message,
+                    });
+                }
+
+                req.io.to(`conversation_${conversationId}`).emit('participants_added', {
+                    conversationId: conversationId,
+                    addedParticipants: result.addedParticipants
+                });
+
+                const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, true);
+
+                for (const participantId of participantIds) {
+                    const unreadCount = await MessageService.getUnreadCount(conversationId, participantId);
+                    req.io.to(`user_${participantId}`).emit('conversation_updated', {
+                        conversationId: conversationId,
+                        lastMessage: result.message,
+                        unreadCount: unreadCount,
+                    });
+                }
+            }
+
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'participants_added_success',
+            });
+
+        } catch (error) {
+            console.error('ConversationController - addConversationParticipants() error:', error);
+            ApiResponse.error(res, {
+                code: error.code || 500,
+                statusCode: error.statusCode || 'INTERNAL_SERVER_ERROR',
+                message: error.message || 'An unexpected error occurred',
+                errors: error.errors || []
+            });
+        }
+    }
 }
 
 module.exports = ConversationController;
