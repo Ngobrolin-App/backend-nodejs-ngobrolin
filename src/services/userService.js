@@ -67,23 +67,6 @@ class UserService {
      * Get user by ID
      */
     static async getUserById(currentUserId, targetUserId, baseUrl) {
-        // Check if user is blocked
-        const isBlocked = await BlockedUser.findOne({
-            where: {
-                [Op.or]: [
-                    { userId: currentUserId, blockedUserId: targetUserId },
-                    { userId: targetUserId, blockedUserId: currentUserId }
-                ]
-            }
-        });
-
-        if (isBlocked) {
-            throw new AppError({
-                message: 'user_is_blocked',
-                code: 403,
-                statusCode: 'FORBIDDEN'
-            });
-        }
 
         const user = await User.findByPk(targetUserId);
 
@@ -167,6 +150,34 @@ class UserService {
         await blockedUser.destroy();
 
         return true;
+    }
+
+    static async getBlockUserStatus(currentUserId, targetUserId) {
+        const blockedRecord = await BlockedUser.findOne({
+            where: {
+                [Op.or]: [
+                    { userId: currentUserId, blockedUserId: targetUserId },
+                    { userId: targetUserId, blockedUserId: currentUserId }
+                ]
+            }
+        });
+
+        // Kalau nggak ada record, berarti aman
+        if (!blockedRecord) {
+            throw new AppError({
+                message: 'user_is_not_blocked',
+                code: 404,
+                statusCode: 'NOT_FOUND'
+            });
+        }
+
+        const isBlockedByMe = blockedRecord.userId.toString() === currentUserId.toString();
+
+        return {
+            isBlocked: true,
+            isBlockedByMe: isBlockedByMe,
+            blockedMessage: isBlockedByMe ? 'you_blocked_this_user' : 'you_are_blocked_by_this_user'
+        };
     }
 
     /**

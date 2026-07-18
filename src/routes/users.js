@@ -74,6 +74,14 @@ const blockUserValidation = [
         .withMessage('User ID must be a valid UUID')
 ];
 
+const blockUserStatusValidation = [
+    body('userId')
+        .notEmpty()
+        .withMessage('User ID is required')
+        .isUUID()
+        .withMessage('User ID must be a valid UUID')
+];
+
 // Routes - All POST methods
 router.post('/profile/get', authenticateToken, AuthController.getProfile);
 router.post('/profile/update', authenticateToken, uploadAvatar.single('avatar'), updateProfileValidation, AuthController.updateProfile);
@@ -81,6 +89,7 @@ router.post('/search', authenticateToken, searchValidation, UserController.searc
 router.post('/get-user', authenticateToken, getUserValidation, UserController.getUserById);
 router.post('/block', authenticateToken, blockUserValidation, UserController.blockUser);
 router.post('/unblock', authenticateToken, blockUserValidation, UserController.unblockUser);
+router.post('/block-user-status', authenticateToken, blockUserStatusValidation, UserController.getBlockUserStatus);
 router.post('/blocked/list', authenticateToken, UserController.getBlockedUsers);
 
 module.exports = router;

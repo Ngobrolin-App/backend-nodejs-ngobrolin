@@ -80,12 +80,6 @@ const getConversationValidation = [
         .withMessage('IsShowParticipants must be a boolean')
         .toBoolean()
         .default(true),
-    body('isParticipantsIncludeMe')
-        .optional()
-        .isBoolean()
-        .withMessage('IsParticipantsIncludeMe must be a boolean')
-        .toBoolean()
-        .default(true)
 ];
 
 const paginationValidation = [

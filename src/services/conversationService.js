@@ -114,13 +114,11 @@ class ConversationService {
 
     static async getPrivateConversationByParticipantsIds(userId, partnerId) {
         if (!partnerId) {
-            if (!conversationId) {
-                throw new AppError({
-                    message: 'partnerid_required',
-                    code: 400,
-                    statusCode: 'BAD_REQUEST'
-                });
-            }
+            throw new AppError({
+                message: 'partnerid_required',
+                code: 400,
+                statusCode: 'BAD_REQUEST'
+            });
         }
 
         const participantIds = [userId, partnerId];
@@ -427,7 +425,7 @@ class ConversationService {
     /**
      * Get conversation by ID
      */
-    static async getConversationById(conversationId, userId, isShowParticipants = true, isParticipantsIncludeMe = true, baseUrl) {
+    static async getConversationById(conversationId, userId, isShowParticipants = true, baseUrl) {
         // Check if user is participant
         const participation = await ConversationParticipant.findOne({
             where: {
@@ -444,13 +442,6 @@ class ConversationService {
             });
         }
 
-        const userWhere = {};
-        if (!isParticipantsIncludeMe) {
-            userWhere.id = {
-                [Op.ne]: userId
-            };
-        }
-
         const conversation = await Conversation.findByPk(conversationId, {
             include: [
                 {
@@ -465,7 +456,6 @@ class ConversationService {
                             {
                                 model: User,
                                 as: 'user',
-                                where: userWhere,
                             }
                         ]
                     }]
@@ -497,6 +487,10 @@ class ConversationService {
                 ...p.user.toJSON(),
                 avatarUrl: buildAvatarUrl(p.user.avatarUrl, baseUrl),
             }));
+
+            if (conversation.type == 'private') {
+                result.participants = result.participants.filter(participant => participant.id !== userId);
+            }
         }
 
         return result;
@@ -808,6 +802,49 @@ class ConversationService {
             addedParticipants: addedParticipantsFormatted, // Sekarang bertipe List<ConversationParticipantModel>
             message: systemMessage
         };
+    }
+
+    /**
+    * Gets the ID of a private conversation between two users.
+    * Suitable for use in the block/unblock feature.
+    */
+    static async getPrivateConversationId(currentUserId, targetUserId) {
+        if (!currentUserId || !targetUserId) return null;
+
+        const existingConversations = await ConversationParticipant.findAll({
+            where: {
+                userId: { [Op.in]: [currentUserId, targetUserId] }
+            },
+            include: [
+                {
+                    model: Conversation,
+                    as: 'conversation',
+                    where: { type: 'private' },
+                    attributes: ['id'] // Kita cuma butuh ID-nya
+                }
+            ]
+        });
+
+        // Group by conversationId
+        const conversationGroups = {};
+        existingConversations.forEach(cp => {
+            if (!conversationGroups[cp.conversationId]) {
+                conversationGroups[cp.conversationId] = [];
+            }
+            // Prevent duplication of the same data
+            if (!conversationGroups[cp.conversationId].includes(cp.userId)) {
+                conversationGroups[cp.conversationId].push(cp.userId);
+            }
+        });
+
+        // Find conversations that contain exactly those 2 users
+        for (const convId in conversationGroups) {
+            if (conversationGroups[convId].length === 2) {
+                return convId;
+            }
+        }
+
+        return null; // If you have never chatted
     }
 }
 

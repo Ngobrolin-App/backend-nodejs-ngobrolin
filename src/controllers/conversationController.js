@@ -132,7 +132,7 @@ class ConversationController {
     // Get conversation by ID
     static async getConversationById(req, res) {
         try {
-            const { conversationId, isShowParticipants = true, isParticipantsIncludeMe = true } = req.body;
+            const { conversationId, isShowParticipants = true } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
             const currentUserId = req.user.userId;
 
@@ -140,7 +140,6 @@ class ConversationController {
                 conversationId,
                 currentUserId,
                 isShowParticipants,
-                isParticipantsIncludeMe,
                 baseUrl
             );
 

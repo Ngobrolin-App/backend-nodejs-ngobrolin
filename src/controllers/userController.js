@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const UserService = require('../services/userService');
+const ConversationService = require('../services/conversationService');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 
@@ -85,9 +86,21 @@ class UserController {
                 });
             }
 
-            const { userId } = req.body;
+            const { userId: targetUserId } = req.body;
+            const currentUserId = req.user.userId;
 
-            await UserService.blockUser(req.user.userId, userId);
+            await UserService.blockUser(currentUserId, targetUserId);
+
+            // Check if they have an existing private conversation
+            const conversationId = await ConversationService.getPrivateConversationId(currentUserId, targetUserId);
+
+            // If there is a conversation, emit a realtime event via Socket.io to update the UI
+            if (conversationId && req.io) {
+                // Notify blocker (eg: to update chat icon/status)
+                req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
+                    conversationId: conversationId,
+                });
+            }
 
             ApiResponse.success(res, {
                 code: 200,
@@ -108,9 +121,20 @@ class UserController {
     // Unblock user
     static async unblockUser(req, res) {
         try {
-            const { userId } = req.body;
+            const { userId: targetUserId } = req.body;
+            const currentUserId = req.user.userId;
 
-            await UserService.unblockUser(req.user.userId, userId);
+            await UserService.unblockUser(currentUserId, targetUserId);
+
+            // Check if they have a private conversation
+            const conversationId = await ConversationService.getPrivateConversationId(currentUserId, targetUserId);
+
+            // If there is a conversation, emit a realtime event via Socket.io
+            if (conversationId && req.io) {
+                req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
+                    conversationId: conversationId,
+                });
+            }
 
             ApiResponse.success(res, {
                 code: 200,
@@ -119,6 +143,29 @@ class UserController {
             });
         } catch (error) {
             console.error('UserController - unblockUser() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
+        }
+    }
+
+    static async getBlockUserStatus(req, res) {
+        try {
+            const { userId } = req.body;
+
+            const result = await UserService.getBlockUserStatus(req.user.userId, userId);
+
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'block_status_retrieved_success',
+                data: result,
+            });
+        } catch (error) {
+            console.error('UserController - blockedUserStatus() error:', error);
             ApiResponse.error(res, {
                 code: error.code,
                 statusCode: error.statusCode,
