@@ -128,12 +128,15 @@ class ConversationService {
             where: {
                 userId: {
                     [Op.in]: participantIds,
-                }
+                },
             },
             include: [
                 {
                     model: Conversation,
                     as: 'conversation',
+                    where: {
+                        type: 'private',
+                    }
                 }
 
             ],
