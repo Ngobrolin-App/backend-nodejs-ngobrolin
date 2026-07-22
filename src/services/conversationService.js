@@ -1,4 +1,4 @@
-const { Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
+const { sequelize, Conversation, ConversationParticipant, User, Message, BlockedUser } = require('../models');
 const MessageService = require('../services/messageService');
 const { Op, fn, col, where } = require('sequelize');
 const { buildAvatarUrl } = require('../utils/urlHelper');
@@ -13,6 +13,64 @@ class ConversationService {
             }
         });
         return !!participation;
+    }
+
+    static async searchGroupConversations(currentUserId, query, baseUrl, page = 1, limit = 20) {
+        const offset = (page - 1) * limit;
+
+        let whereClause = {
+            type: 'group'
+        };
+
+        if (query && query.trim()) {
+            whereClause = {
+                ...whereClause,
+                name: { [Op.iLike]: `%${query.trim()}%` }
+            };
+        }
+
+        const groupConversations = await Conversation.findAndCountAll({
+            where: whereClause,
+            distinct: true,
+            include: [
+                {
+                    model: User,
+                    as: 'createdByUser',
+                },
+                {
+                    model: ConversationParticipant,
+                    as: 'participants',
+                    attributes: ['id', 'userId'],
+                }
+            ],
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            order: [['name', 'ASC']],
+        });
+
+        return {
+            groupConversations: groupConversations.rows.map((group) => {
+                const groupData = group.toJSON();
+
+                const isMember = groupData.participants
+                    ? groupData.participants.some(
+                        (p) => String(p.userId) === String(currentUserId)
+                    )
+                    : false;
+
+                return {
+                    ...groupData,
+                    groupImage: groupData.groupImage ? buildAvatarUrl(groupData.groupImage, baseUrl) : null,
+                    totalParticipants: groupData.participants ? groupData.participants.length : 0,
+                    isMember: isMember,
+                    participants: null,
+                };
+            }),
+            total: groupConversations.count,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(groupConversations.count / limit)
+        };
     }
 
     static async getConversations(userId, baseUrl, page = 1, limit = 20) {
@@ -805,6 +863,109 @@ class ConversationService {
             addedParticipants: addedParticipantsFormatted, // Sekarang bertipe List<ConversationParticipantModel>
             message: systemMessage
         };
+    }
+
+    static async joinGroupConversation(conversationId, userId, baseUrl) {
+        const transaction = await sequelize.transaction();
+
+        try {
+            // 1. Cari percakapan & pastikan tipe-nya group
+            const conversation = await Conversation.findByPk(conversationId, { transaction });
+            if (!conversation) {
+                throw new AppError({
+                    code: 404,
+                    statusCode: 'NOT_FOUND',
+                    message: 'conversation_not_found'
+                });
+            }
+
+            if (conversation.type !== 'group') {
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'cannot_join_private_conversation'
+                });
+            }
+
+            // 2. Cek apakah user sudah menjadi anggota grup
+            const existingParticipant = await ConversationParticipant.findOne({
+                where: {
+                    conversationId: conversationId,
+                    userId: userId
+                },
+                transaction
+            });
+
+            if (existingParticipant) {
+                throw new AppError({
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    message: 'already_group_member'
+                });
+            }
+
+            // 3. Tambahkan user ke ConversationParticipant
+            const newParticipant = await ConversationParticipant.create({
+                conversationId: conversationId,
+                userId: userId,
+                joinedAt: new Date()
+            }, { transaction });
+
+            // 4. Ambil data User untuk keperluan metadata System Message
+            const user = await User.findByPk(userId, {
+                transaction
+            });
+
+            // 5. Buat System Message ("User A bergabung ke dalam grup")
+            const systemMessage = await Message.create({
+                conversationId: conversationId,
+                senderId: userId, // atau null jika sistem
+                type: 'system',
+                content: `${user.name || user.username} joined the group`,
+                systemMetadata: {
+                    action: 'USER_JOINED',
+                    actorId: user.id,
+                    actorName: user.name || user.username,
+                }
+            }, { transaction });
+
+            await transaction.commit();
+
+            // 6. Format response data percakapan terbaru
+            const updatedConversation = await this.getConversationById(
+                conversationId,
+                userId,
+                true,
+                baseUrl
+            );
+
+            const joinedParticipantFormatted = {
+                id: newParticipant.id,
+                conversationId: newParticipant.conversationId,
+                userId: newParticipant.userId,
+                lastReadMessageId: newParticipant.lastReadMessageId || null,
+                joinedAt: newParticipant.joinedAt,
+                user: user ? {
+                    ...user.toJSON(),
+                    avatarUrl: buildAvatarUrl(user.avatarUrl, baseUrl),
+                } : null
+            };
+
+            return {
+                conversation: updatedConversation,
+                joinedParticipant: joinedParticipantFormatted,
+                message: systemMessage
+            };
+
+        } catch (error) {
+            throw new AppError({
+                code: 400,
+                statusCode: 'BAD_REQUEST',
+                message: 'already_group_member'
+            });
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     /**

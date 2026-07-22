@@ -93,6 +93,22 @@ const paginationValidation = [
         .withMessage('Limit must be between 1 and 100')
 ];
 
+const searchGroupValidation = [
+    body('q')
+        .notEmpty()
+        .withMessage('Search query is required')
+        .isLength({ min: 1, max: 50 })
+        .withMessage('Search query must be between 1 and 50 characters'),
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100')
+];
+
 const leaveConversationValidation = [
     body('conversationId')
         .notEmpty()
@@ -145,11 +161,22 @@ const addConversationParticipantsValidation = [
         .withMessage('Each participant ID must be a valid UUID')
 ];
 
+const joinGroupConversationValidation = [
+    body('conversationId')
+        .notEmpty()
+        .withMessage('Conversation ID is required')
+        .isUUID()
+        .withMessage('Conversation ID must be a valid UUID'),
+
+]
+
 // Routes - All POST methods
 router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
+router.post('/search-group', authenticateToken, searchGroupValidation, ConversationController.searchGroupConversations);
 router.post('/private-conversation', authenticateToken, privateConversationValidation, ConversationController.getPrivateConversationByParticipantsIds);
 router.post('/participants', authenticateToken, getConversationParticipantsValidation, ConversationController.getConversationParticipants);
 router.post('/add-participants', authenticateToken, addConversationParticipantsValidation, ConversationController.addConversationParticipants);
+router.post('/join-group', authenticateToken, joinGroupConversationValidation, ConversationController.joinGroupConversation);
 router.post('/create', authenticateToken, createConversationValidation, ConversationController.createConversation);
 router.post('/get', authenticateToken, getConversationValidation, ConversationController.getConversationById);
 router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);

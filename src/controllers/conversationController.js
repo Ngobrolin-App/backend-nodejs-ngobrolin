@@ -43,6 +43,45 @@ class ConversationController {
         }
     }
 
+    static async searchGroupConversations(req, res) {
+        try {
+            const { q, page = 1, limit = 20 } = req.body;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
+
+            const result = await ConversationService.searchGroupConversations(
+                currentUserId,
+                q,
+                baseUrl,
+                page,
+                limit
+            );
+
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                message: 'data_retrieved',
+                data: {
+                    groupConversations: result.groupConversations,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('ConversationController - searchGroupConversations() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
+        }
+    }
+
     static async uploadGroupImage(req, res) {
         try {
             if (!req.file) {
@@ -385,6 +424,77 @@ class ConversationController {
 
         } catch (error) {
             console.error('ConversationController - addConversationParticipants() error:', error);
+            ApiResponse.error(res, {
+                code: error.code || 500,
+                statusCode: error.statusCode || 'INTERNAL_SERVER_ERROR',
+                message: error.message || 'An unexpected error occurred',
+                errors: error.errors || []
+            });
+        }
+    }
+
+    // Join group conversation by current user
+    static async joinGroupConversation(req, res) {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                throw new AppError({
+                    message: 'validation_failed',
+                    code: 400,
+                    statusCode: 'BAD_REQUEST',
+                    errors: errors.array(),
+                });
+            }
+
+            const { conversationId } = req.body;
+            const currentUserId = req.user.userId;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+            // 1. Panggil service untuk proses join
+            const result = await ConversationService.joinGroupConversation(
+                conversationId,
+                currentUserId,
+                baseUrl
+            );
+
+            // 2. Emit Realtime Events via Socket.io (Mirip addConversationParticipants)
+            if (result && req.io) {
+                // Broadcast pesan sistem baru ke room grup
+                if (result.message) {
+                    req.io.to(`conversation_${conversationId}`).emit('new_message', {
+                        conversationId: conversationId,
+                        message: result.message,
+                    });
+                }
+
+                // Broadcast event member baru ke room grup
+                req.io.to(`conversation_${conversationId}`).emit('participant_joined', {
+                    conversationId: conversationId,
+                    joinedParticipant: result.joinedParticipant
+                });
+
+                // Update list percakapan & unread count untuk SELURUH anggota (termasuk user yang baru join)
+                const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, true);
+
+                for (const participantId of participantIds) {
+                    const unreadCount = await MessageService.getUnreadCount(conversationId, participantId);
+
+                    req.io.to(`user_${participantId}`).emit('conversation_updated', {
+                        conversationId: conversationId,
+                        lastMessage: result.message,
+                        unreadCount: unreadCount,
+                    });
+                }
+            }
+
+            ApiResponse.success(res, {
+                code: 200,
+                statusCode: 'OK',
+                message: 'join_group_success',
+                data: result.conversation
+            });
+        } catch (error) {
+            console.error('ConversationController - joinGroupConversation() error:', error);
             ApiResponse.error(res, {
                 code: error.code || 500,
                 statusCode: error.statusCode || 'INTERNAL_SERVER_ERROR',

@@ -10,9 +10,10 @@ class UserController {
         try {
             const { q, page = 1, limit = 20 } = req.body;
             const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
 
             const result = await UserService.searchUsers(
-                req.user.userId,
+                currentUserId,
                 q,
                 baseUrl,
                 page,
