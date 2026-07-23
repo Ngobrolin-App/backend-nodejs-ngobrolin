@@ -503,6 +503,56 @@ class ConversationController {
             });
         }
     }
+
+    static async getUserGroupsInCommon(req, res) {
+        try {
+            const { userId, page = 1, limit = 20 } = req.body;
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const currentUserId = req.user.userId;
+
+            if (!userId) {
+                throw new AppError(
+                    {
+                        message: 'userid_required',
+                        code: 400,
+                        statusCode: 'BAD_REQUEST'
+                    }
+                );
+            }
+
+            const result = await ConversationService.getUserGroupsInCommon(
+                currentUserId,
+                userId,
+                baseUrl,
+                page,
+                limit,
+            );
+
+            ApiResponse.success(res, {
+                code: 200,
+                status: 'OK',
+                messasge: 'data_retrieved',
+                data: {
+                    userGroupsInCommon: result.userGroupsInCommon,
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages
+                    }
+                },
+            });
+
+        } catch (error) {
+            console.error('ConversationController - getUserGroupsInCommon() error:', error);
+            ApiResponse.error(res, {
+                code: error.code,
+                statusCode: error.statusCode,
+                message: error.message,
+                errors: error.errors || []
+            });
+        }
+    }
 }
 
 module.exports = ConversationController;

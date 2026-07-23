@@ -167,11 +167,27 @@ const joinGroupConversationValidation = [
         .withMessage('Conversation ID is required')
         .isUUID()
         .withMessage('Conversation ID must be a valid UUID'),
+];
 
-]
+const userGroupsInCommonValidation = [
+    body('page')
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('Page must be a positive integer'),
+    body('limit')
+        .optional()
+        .isInt({ min: 1, max: 100 })
+        .withMessage('Limit must be between 1 and 100'),
+    body('userId')
+        .notEmpty()
+        .withMessage('User ID is required')
+        .isUUID()
+        .withMessage('User ID must be a valid UUID'),
+];
 
 // Routes - All POST methods
 router.post('/list', authenticateToken, paginationValidation, ConversationController.getConversations);
+router.post('/groups-in-common', authenticateToken, paginationValidation, ConversationController.getConversations);
 router.post('/search-group', authenticateToken, searchGroupValidation, ConversationController.searchGroupConversations);
 router.post('/private-conversation', authenticateToken, privateConversationValidation, ConversationController.getPrivateConversationByParticipantsIds);
 router.post('/participants', authenticateToken, getConversationParticipantsValidation, ConversationController.getConversationParticipants);
@@ -182,5 +198,6 @@ router.post('/get', authenticateToken, getConversationValidation, ConversationCo
 router.post('/update', authenticateToken, updateConversationValidation, ConversationController.updateConversation);
 router.post('/leave', authenticateToken, leaveConversationValidation, ConversationController.leaveConversation);
 router.post('/upload-group-image', authenticateToken, uploadGroupImage.single('groupImage'), ConversationController.uploadGroupImage);
+router.post('/user-groups-in-common', authenticateToken, userGroupsInCommonValidation, ConversationController.getUserGroupsInCommon);
 
 module.exports = router;

@@ -1010,6 +1010,80 @@ class ConversationService {
 
         return null; // If you have never chatted
     }
+
+    static async getUserGroupsInCommon(currentUserId, targetUserId, baseUrl, page = 1, limit = 20) {
+        if (!targetUserId) {
+            throw new AppError({
+                code: 400,
+                statusCode: 'BAD_REQUEST',
+                message: 'target_user_id_required'
+            });
+        }
+
+        const offset = (page - 1) * limit;
+
+        // Siapkan response default jika data kosong, agar format balikan tetap konsisten
+        const emptyResponse = {
+            userGroupsInCommon: [],
+            total: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: 0
+        };
+
+        if (currentUserId === targetUserId) {
+            return emptyResponse;
+        }
+
+        // 1. Dapatkan ID group yang mempertemukan kedua user
+        const commonParticipants = await ConversationParticipant.findAll({
+            attributes: ['conversationId'],
+            where: {
+                userId: {
+                    [Op.in]: [currentUserId, targetUserId]
+                }
+            },
+            group: ['conversationId'],
+            having: sequelize.where(
+                sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('user_id'))),
+                '=',
+                2
+            ),
+            raw: true
+        });
+
+        const commonGroupIds = commonParticipants.map(row => row.conversationId);
+
+        if (commonGroupIds.length === 0) {
+            return emptyResponse;
+        }
+
+        // 2. Ambil detail conversation dengan findAndCountAll untuk pagination
+        const groups = await Conversation.findAndCountAll({
+            where: {
+                id: {
+                    [Op.in]: commonGroupIds
+                },
+                type: 'group'
+            },
+            order: [['createdAt', 'DESC']],
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
+
+        // 3. Format response sesuai dengan struktur paginasi
+        return {
+            userGroupsInCommon: groups.rows.map(group => ({
+                ...group.toJSON(),
+                groupImage: group.groupImage ? buildAvatarUrl(group.groupImage, baseUrl) : null
+            })),
+            total: groups.count,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(groups.count / limit)
+        };
+    }
 }
+
 
 module.exports = ConversationService;
