@@ -96,11 +96,18 @@ class UserController {
             const conversationId = await ConversationService.getPrivateConversationId(currentUserId, targetUserId);
 
             // If there is a conversation, emit a realtime event via Socket.io to update the UI
-            if (conversationId && req.io) {
-                // Notify blocker (eg: to update chat icon/status)
-                req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
-                    conversationId: conversationId,
-                });
+            if (req.io) {
+                if (conversationId) {
+                    req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
+                        conversationId: conversationId,
+                    });
+                }
+                if (currentUserId) {
+                    req.io.to(`user_${currentUserId}`).emit('block_status_updated', {});
+                }
+                if (currentUserId) {
+                    req.io.to(`user_${targetUserId}`).emit('block_status_updated', {});
+                }
             }
 
             ApiResponse.success(res, {
@@ -131,10 +138,18 @@ class UserController {
             const conversationId = await ConversationService.getPrivateConversationId(currentUserId, targetUserId);
 
             // If there is a conversation, emit a realtime event via Socket.io
-            if (conversationId && req.io) {
-                req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
-                    conversationId: conversationId,
-                });
+            if (req.io) {
+                if (conversationId) {
+                    req.io.to(`conversation_${conversationId}`).emit('block_status_updated', {
+                        conversationId: conversationId,
+                    });
+                }
+                if (currentUserId) {
+                    req.io.to(`user_${currentUserId}`).emit('block_status_updated', {});
+                }
+                if (currentUserId) {
+                    req.io.to(`user_${targetUserId}`).emit('block_status_updated', {});
+                }
             }
 
             ApiResponse.success(res, {
