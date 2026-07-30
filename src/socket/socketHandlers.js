@@ -77,9 +77,9 @@ const socketHandlers = (socket, io) => {
             const currentUserId = socket.userId;
             if (!currentUserId) return;
 
-            const { conversationId, participantIds } = data;
+            const { conversationId } = data;
 
-            // const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
+            const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
 
             socket.to(`conversation_${conversationId}`).emit('user_typing', {
                 userId: socket.userId,
@@ -106,9 +106,9 @@ const socketHandlers = (socket, io) => {
             const currentUserId = socket.userId;
             if (!currentUserId) return;
 
-            const { conversationId, participantIds } = data;
+            const { conversationId } = data;
 
-            // const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
+            const participantIds = await ConversationService.getConversationParticipantIds(currentUserId, conversationId, false);
 
             socket.to(`conversation_${conversationId}`).emit('user_stopped_typing', {
                 userId: socket.userId,
