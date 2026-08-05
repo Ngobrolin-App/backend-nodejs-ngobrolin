@@ -105,7 +105,7 @@ class UserController {
                 if (currentUserId) {
                     req.io.to(`user_${currentUserId}`).emit('block_status_updated', {});
                 }
-                if (currentUserId) {
+                if (targetUserId) {
                     req.io.to(`user_${targetUserId}`).emit('block_status_updated', {});
                 }
             }
